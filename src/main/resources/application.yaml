@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: lu-memory
+  main:
+    web-application-type: none
+    banner-mode: off
+  ai:
+    mcp:
+      server:
+        enabled: true
+        name: LU-MEMORY
+        version: 0.0.1
+        type: SYNC
+        resource-change-notification: true
+        tool-change-notification: true
+        prompt-change-notification: true
+  datasource:
+    url: jdbc:postgresql://19.334.44.3:5432/lu_memory?currentSchema=public
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: Pf@@j4Y&?dJ@3P5
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 10
+      minimum-idle: 3
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      auto-commit: false
+      pool-name: LuMemoryPool
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+logging:
+  pattern:
+    console:
+  file:
+    name: mcp-lu-memory-stdio-server.log

@@ -7,6 +7,8 @@ import com.zademy.lu_memory.models.ObservationType;
 import com.zademy.lu_memory.repositorys.ObservationRepository;
 import com.zademy.lu_memory.repositorys.PromptRepository;
 import com.zademy.lu_memory.repositorys.SessionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +27,8 @@ import java.util.UUID;
 
 @Service
 public class MemoryService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MemoryService.class);
 
     private final ObservationRepository observationRepository;
     private final PromptRepository promptRepository;
@@ -167,32 +171,96 @@ public class MemoryService {
             return List.of();
         }
 
+        try {
+            // Usar FTS5 de SQLite para búsqueda de texto completo
+            String sql = """
+                    SELECT o.id,
+                           o.type,
+                           o.topic_key,
+                           o.title,
+                           o.content,
+                           o.created_at,
+                           o.deleted,
+                           bm25(observations_fts) AS score
+                    FROM observations o
+                    JOIN observations_fts fts ON o.rowid = fts.rowid
+                    WHERE (%s)
+                      AND observations_fts MATCH ?
+                    ORDER BY score ASC, o.created_at DESC
+                    LIMIT ?
+                    """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
+
+            return jdbcTemplate.query(sql, (rs, rowNum) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", rs.getString("id"));
+                row.put("type", rs.getString("type"));
+                row.put("topicKey", rs.getString("topic_key"));
+                row.put("title", rs.getString("title"));
+                row.put("snippet", toSnippet(rs.getString("content")));
+                row.put("score", rs.getDouble("score"));
+                row.put("createdAt", rs.getTimestamp("created_at").toInstant());
+                row.put("deleted", rs.getBoolean("deleted"));
+                return row;
+            }, query, limit);
+        } catch (Exception e) {
+            LOGGER.error("Error en búsqueda FTS5: " + e.getMessage(), e);
+            // Fallback a búsqueda simple sin FTS
+            return fallbackSearch(query, limit, includeDeleted);
+        }
+    }
+
+    private List<Map<String, Object>> fallbackSearch(String query, int limit, boolean includeDeleted) {
         String sql = """
-                SELECT id,
-                       type,
-                       topic_key,
-                       title,
-                       content,
-                       created_at,
-                       deleted,
-                       ts_rank_cd(
-                           to_tsvector('simple',
-                               coalesce(topic_key,'') || ' ' ||
-                               coalesce(title,'') || ' ' ||
-                               coalesce(content,'') || ' ' ||
-                               coalesce(tags_text,'')),
-                           plainto_tsquery('simple', ?)
-                       ) AS score
+                SELECT id, type, topic_key, title, content, created_at, deleted
                 FROM observations
                 WHERE (%s)
-                  AND to_tsvector('simple',
-                      coalesce(topic_key,'') || ' ' ||
-                      coalesce(title,'') || ' ' ||
-                      coalesce(content,'') || ' ' ||
-                      coalesce(tags_text,'')) @@ plainto_tsquery('simple', ?)
-                ORDER BY score DESC, created_at DESC
+                  AND (type LIKE ? OR topic_key LIKE ? OR title LIKE ? OR content LIKE ?)
+                ORDER BY created_at DESC
                 LIMIT ?
                 """.formatted(includeDeleted ? "1=1" : "deleted = false");
+
+        String searchTerm = "%" + query + "%";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("type", rs.getString("type"));
+            row.put("topicKey", rs.getString("topic_key"));
+            row.put("title", rs.getString("title"));
+            row.put("snippet", toSnippet(rs.getString("content")));
+            row.put("score", 0.0);
+            row.put("createdAt", rs.getTimestamp("created_at").toInstant());
+            row.put("deleted", rs.getBoolean("deleted"));
+            return row;
+        }, searchTerm, searchTerm, searchTerm, searchTerm, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> searchMemoriesAdvanced(String query, int limit, boolean includeDeleted) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+
+        // Búsqueda avanzada con FTS5 usando diferentes operadores
+        String ftsQuery = enhanceFtsQuery(query);
+
+        String sql = """
+                SELECT o.id,
+                       o.type,
+                       o.topic_key,
+                       o.title,
+                       o.content,
+                       o.tags_text,
+                       o.created_at,
+                       o.deleted,
+                       bm25(observations_fts) AS score,
+                       snippet(observations_fts, 2, '<mark>', '</mark>', '...', 64) AS highlighted_content
+                FROM observations o
+                JOIN observations_fts fts ON o.id = fts.id
+                WHERE (%s)
+                  AND observations_fts MATCH ?
+                ORDER BY score ASC, o.created_at DESC
+                LIMIT ?
+                """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -200,12 +268,27 @@ public class MemoryService {
             row.put("type", rs.getString("type"));
             row.put("topicKey", rs.getString("topic_key"));
             row.put("title", rs.getString("title"));
-            row.put("snippet", toSnippet(rs.getString("content")));
+            row.put("content", rs.getString("content"));
+            row.put("highlightedContent", rs.getString("highlighted_content"));
+            row.put("tags", rs.getString("tags_text"));
             row.put("score", rs.getDouble("score"));
             row.put("createdAt", rs.getTimestamp("created_at").toInstant());
             row.put("deleted", rs.getBoolean("deleted"));
             return row;
-        }, query, query, limit);
+        }, ftsQuery, limit);
+    }
+
+    private String enhanceFtsQuery(String query) {
+        // Mejorar la consulta FTS con operadores avanzados
+        String enhanced = query.trim();
+
+        // Si no contiene operadores FTS, agregar búsqueda por prefijo
+        if (!enhanced.contains("AND") && !enhanced.contains("OR") && !enhanced.contains("NOT") && !enhanced.contains("\"")) {
+            String[] words = enhanced.split("\\s+");
+            enhanced = String.join(" OR ", words);
+        }
+
+        return enhanced;
     }
 
     @Transactional

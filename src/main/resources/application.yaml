@@ -15,30 +15,36 @@ spring:
         tool-change-notification: true
         prompt-change-notification: true
   datasource:
-    url: jdbc:postgresql://19.334.44.3:5432/lu_memory?currentSchema=public
-    driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: Pf@@j4Y&?dJ@3P5
+    url: jdbc:sqlite:C:/Apps/sqlite-tools-win-x64/lu-memory.db
+    driver-class-name: org.sqlite.JDBC
     hikari:
       connection-timeout: 20000
-      maximum-pool-size: 10
-      minimum-idle: 3
+      maximum-pool-size: 5
+      minimum-idle: 2
       idle-timeout: 300000
       max-lifetime: 1200000
       auto-commit: false
-      pool-name: LuMemoryPool
+      pool-name: LuMemorySQLitePool
   jpa:
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
-        jdbc.time_zone: UTC
         format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        jdbc.batch_size: 1
+        order_inserts: true
+        order_updates: true
     show-sql: false
 
 logging:
+  level:
+    org.springframework.ai: INFO
+    com.zademy.lu_memory: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    root: INFO
   pattern:
-    console:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   file:
-    name: mcp-lu-memory-stdio-server.log
+    name: logs/mcp-lu-memory-stdio-server.log

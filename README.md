@@ -65,19 +65,19 @@ This MCP server exposes the following tools directly to the AI agent:
 
 ### Session & Context Control
 
-- `mem_session_start` - Register a session start.
-- `mem_session_end` - Mark a session as completed.
+- `mem_session_start` - Register a session start. Requires `agentName` (e.g., "Windsurf") and optionally `branchName`.
+- `mem_session_end` - Mark a session as completed. Requires a valid `status` (`COMPLETED`, `ABORTED`, or `FAILED`).
 - `mem_session_summary` - Save an end-of-session summary.
 - `mem_context` - Get recent context from previous sessions.
 - `mem_timeline` - Get chronological context around an observation.
 
 ### Observation Management
 
-- `mem_save` - Save a structured observation (supports scopes, tags, types, string session IDs, and custom project names).
+- `mem_save` - Save a structured observation (supports scopes, tags, strictly defined types like DECISION or BUGFIX, string session IDs, and custom project names). Ensure to use tags for better searchability.
 - `mem_update` - Update an existing observation by ID (includes project name).
 - `mem_delete` - Delete an observation (soft-delete by default).
 - `mem_get_observation` - Get full content of a specific memory.
-- `mem_save_prompt` - Save a user prompt for future context.
+- `mem_save_prompt` - Save a user prompt for future context. Requires `intent` and `source` to categorize the prompt effectively.
 
 ### Search and Querying
 
@@ -91,9 +91,11 @@ This MCP server exposes the following tools directly to the AI agent:
 Agents interacting with this server are encouraged to follow this protocol:
 
 1. **Context Recovery**: Always call `mem_context` at the start of a session or after any reset to recover context.
-2. **Proactive Saves**: Use `mem_save` for big architectural decisions, bugs, discoveries, config changes, etc. Don't wait to be asked.
-3. **Topics**: Use `mem_suggest_topic_key` and group related observations under the same `topicKey`.
-4. **Search Pattern**: When recalling information, use the 3-layer pattern: `mem_search` -> `mem_timeline` -> `mem_get_observation`.
+2. **Session Start**: Always open a session using `mem_session_start` and provide the `agentName`.
+3. **Proactive Saves**: Use `mem_save` for big architectural decisions, bugs, discoveries, config changes, etc. Don't wait to be asked. **Always** include a valid `type` (e.g., DECISION, BUGFIX), `tags`, `projectName`, and the current `sessionId`.
+4. **Topics**: Use `mem_suggest_topic_key` and group related observations under the same `topicKey`.
+5. **Search Pattern**: When recalling information, use the 3-layer pattern: `mem_search` -> `mem_timeline` -> `mem_get_observation`.
+6. **Session End**: Always close the session with `mem_session_summary` (following the Markdown taxonomy) and `mem_session_end` (with the appropriate `status`).
 
 ### 📝 Formatted Memory Content
 
@@ -104,7 +106,8 @@ When saving architectural designs or long memories, it is highly recommended to 
 **Why**: [Why this architecture/state exists, problems it solves]
 **Where**: [Where it lives (code paths, files, altered services)]
 **Key Details**:
+
 - [Important detail 1...]
 - [Important detail 2...]
-**Learned**: [Key lessons learned for future recall]
+  **Learned**: [Key lessons learned for future recall]
 ```

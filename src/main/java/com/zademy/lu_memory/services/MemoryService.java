@@ -64,7 +64,17 @@ public class MemoryService {
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
         session.setStatus(normalize(status) == null ? "COMPLETED" : status.trim().toUpperCase(Locale.ROOT));
-        session.setSummary(normalize(summary));
+
+        String normSummary = normalize(summary);
+        if (normSummary != null) {
+            if (session.getSummary() == null || session.getSummary().isBlank()) {
+                session.setSummary(normSummary);
+            } else if (!session.getSummary().contains(normSummary)) {
+                // Anexa el nuevo texto en lugar de destruir el resumen previo.
+                session.setSummary(session.getSummary() + "\n\n--- End Note ---\n" + normSummary);
+            }
+        }
+
         session.setEndedAt(Instant.now());
         return sessionRepository.save(session);
     }

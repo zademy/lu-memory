@@ -12,27 +12,36 @@ import java.util.UUID;
 
 public interface ObservationRepository extends JpaRepository<ObservationEntity, UUID> {
 
-    Optional<ObservationEntity> findByIdAndDeletedFalse(UUID id);
+  Optional<ObservationEntity> findByIdAndDeletedFalse(UUID id);
 
-    long countByDeletedFalse();
+  long countByDeletedFalse();
 
-    long countByDeletedTrue();
+  long countByDeletedTrue();
 
-    boolean existsByTopicKeyAndDeletedFalse(String topicKey);
+  boolean existsByTopicKeyAndDeletedFalse(String topicKey);
 
-    @Query("""
-            select o from ObservationEntity o
-            where o.deleted = false
-              and (:topicKey is null or o.topicKey = :topicKey)
-            order by o.createdAt desc
-            """)
-    List<ObservationEntity> findRecentByTopicKey(String topicKey, Pageable pageable);
+  Optional<ObservationEntity> findByScopeAndProjectKeyAndTopicKeyAndDeletedFalse(String scope, String projectKey,
+      String topicKey);
 
-    @Query("""
-            select o from ObservationEntity o
-            where o.deleted = false
-              and o.createdAt between :from and :to
-            order by o.createdAt asc
-            """)
-    List<ObservationEntity> findTimeline(Instant from, Instant to, Pageable pageable);
+  @Query("SELECT sum(o.duplicateCount) FROM ObservationEntity o WHERE o.deleted = false")
+  Long sumDuplicateCountByDeletedFalse();
+
+  @Query("SELECT sum(o.revisionCount) FROM ObservationEntity o WHERE o.deleted = false")
+  Long sumRevisionCountByDeletedFalse();
+
+  @Query("""
+      select o from ObservationEntity o
+      where o.deleted = false
+        and (:topicKey is null or o.topicKey = :topicKey)
+      order by o.createdAt desc
+      """)
+  List<ObservationEntity> findRecentByTopicKey(String topicKey, Pageable pageable);
+
+  @Query("""
+      select o from ObservationEntity o
+      where o.deleted = false
+        and o.createdAt between :from and :to
+      order by o.createdAt asc
+      """)
+  List<ObservationEntity> findTimeline(Instant from, Instant to, Pageable pageable);
 }

@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,8 +42,7 @@ public class MemoryService {
             ObservationRepository observationRepository,
             PromptRepository promptRepository,
             SessionRepository sessionRepository,
-            JdbcTemplate jdbcTemplate
-    ) {
+            JdbcTemplate jdbcTemplate) {
         this.observationRepository = observationRepository;
         this.promptRepository = promptRepository;
         this.sessionRepository = sessionRepository;
@@ -74,23 +76,78 @@ public class MemoryService {
             String title,
             String content,
             String tags,
-            UUID sessionId,
-            String source
-    ) {
+            String sessionId,
+            String scope,
+            String source,
+            String projectName) {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("content is required");
         }
 
+        // Sanitizar contenido (redactar <private>...</private>)
+        String sanitizedContent = content.replaceAll("(?s)<private>.*?</private>", "[REDACTED]");
+        String actualScope = normalize(scope) == null ? "project" : scope.trim().toLowerCase(Locale.ROOT);
+        String actualTopicKey = resolveTopicKey(topicKey, title, sanitizedContent);
+        String projectKey = "default";
+        String contentHash = computeHash(sanitizedContent);
+
+        Optional<ObservationEntity> existingOpt = observationRepository
+                .findByScopeAndProjectKeyAndTopicKeyAndDeletedFalse(actualScope, projectKey, actualTopicKey);
+
+        if (existingOpt.isPresent()) {
+            ObservationEntity existing = existingOpt.get();
+            existing.setLastSeenAt(Instant.now());
+            if (contentHash.equals(existing.getContentHash())) {
+                existing.setDuplicateCount(existing.getDuplicateCount() + 1);
+            } else {
+                existing.setContent(sanitizedContent.trim());
+                if (normalize(title) != null) {
+                    existing.setTitle(normalize(title));
+                }
+                if (normalize(tags) != null) {
+                    existing.setTagsText(normalize(tags));
+                }
+                existing.setRevisionCount(existing.getRevisionCount() + 1);
+                existing.setContentHash(contentHash);
+            }
+            return observationRepository.save(existing);
+        }
+
         ObservationEntity observation = new ObservationEntity();
         observation.setType(ObservationType.fromString(type).name());
-        observation.setTopicKey(resolveTopicKey(topicKey, title, content));
+        observation.setTopicKey(actualTopicKey);
         observation.setTitle(normalize(title));
-        observation.setContent(content.trim());
+        observation.setContent(sanitizedContent.trim());
         observation.setTagsText(normalize(tags));
         observation.setSessionId(sessionId);
         observation.setSource(normalize(source));
         observation.setDeleted(false);
+        observation.setScope(actualScope);
+        observation.setProjectKey(projectKey);
+        observation.setProjectName(normalize(projectName) != null ? normalize(projectName) : "default");
+        observation.setContentHash(contentHash);
+        observation.setDuplicateCount(0);
+        observation.setRevisionCount(1);
+        observation.setLastSeenAt(Instant.now());
         return observationRepository.save(observation);
+    }
+
+    private String computeHash(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder(2 * hash.length);
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return String.valueOf(input.hashCode());
+        }
     }
 
     @Transactional
@@ -100,8 +157,8 @@ public class MemoryService {
             String topicKey,
             String title,
             String content,
-            String tags
-    ) {
+            String tags,
+            String projectName) {
         ObservationEntity observation = observationRepository.findById(observationId)
                 .orElseThrow(() -> new IllegalArgumentException("Observation not found: " + observationId));
 
@@ -120,6 +177,9 @@ public class MemoryService {
         if (tags != null) {
             observation.setTagsText(normalize(tags));
         }
+        if (normalize(projectName) != null) {
+            observation.setProjectName(projectName.trim());
+        }
 
         return observationRepository.save(observation);
     }
@@ -133,8 +193,7 @@ public class MemoryService {
             observationRepository.delete(observation);
             return Map.of(
                     "id", observationId,
-                    "status", "HARD_DELETED"
-            );
+                    "status", "HARD_DELETED");
         }
 
         observation.setDeleted(true);
@@ -142,8 +201,7 @@ public class MemoryService {
         observationRepository.save(observation);
         return Map.of(
                 "id", observationId,
-                "status", "SOFT_DELETED"
-        );
+                "status", "SOFT_DELETED");
     }
 
     @Transactional(readOnly = true)
@@ -151,6 +209,23 @@ public class MemoryService {
         String base = slugify(normalize(topicHint) != null ? topicHint : contentHint);
         if (base.isBlank()) {
             base = "general-memory";
+        }
+
+        // Heurística por familia
+        String combined = ((topicHint != null ? topicHint : "") + " " + (contentHint != null ? contentHint : ""))
+                .toLowerCase(Locale.ROOT);
+        if (!base.contains("/")) {
+            if (combined.contains("error") || combined.contains("exception") || combined.contains("bug")
+                    || combined.contains("fix")) {
+                base = "bug/" + base.replace("bug-", "").replace("error-", "");
+            } else if (combined.contains("architecture") || combined.contains("design")
+                    || combined.contains("database")) {
+                base = "architecture/" + base;
+            } else if (combined.contains("deploy") || combined.contains("ci/cd") || combined.contains("docker")) {
+                base = "devops/" + base;
+            } else if (combined.contains("pattern") || combined.contains("refactor")) {
+                base = "pattern/" + base;
+            }
         }
 
         if (!observationRepository.existsByTopicKeyAndDeletedFalse(base)) {
@@ -253,9 +328,9 @@ public class MemoryService {
                        o.created_at,
                        o.deleted,
                        bm25(observations_fts) AS score,
-                       snippet(observations_fts, 2, '<mark>', '</mark>', '...', 64) AS highlighted_content
+                        snippet(observations_fts, 2, '<mark>', '</mark>', '...', 64) AS highlighted_content
                 FROM observations o
-                JOIN observations_fts fts ON o.id = fts.id
+                JOIN observations_fts fts ON o.rowid = fts.rowid
                 WHERE (%s)
                   AND observations_fts MATCH ?
                 ORDER BY score ASC, o.created_at DESC
@@ -283,7 +358,8 @@ public class MemoryService {
         String enhanced = query.trim();
 
         // Si no contiene operadores FTS, agregar búsqueda por prefijo
-        if (!enhanced.contains("AND") && !enhanced.contains("OR") && !enhanced.contains("NOT") && !enhanced.contains("\"")) {
+        if (!enhanced.contains("AND") && !enhanced.contains("OR") && !enhanced.contains("NOT")
+                && !enhanced.contains("\"")) {
             String[] words = enhanced.split("\\s+");
             enhanced = String.join(" OR ", words);
         }
@@ -312,9 +388,10 @@ public class MemoryService {
                 "Session Summary",
                 merged,
                 "session,summary",
-                sessionId,
-                "mem_session_summary"
-        );
+                sessionId.toString(),
+                "project",
+                "mem_session_summary",
+                "default");
     }
 
     @Transactional(readOnly = true)
@@ -322,8 +399,7 @@ public class MemoryService {
         int cappedLimit = Math.max(1, Math.min(limit, 100));
         List<ObservationEntity> observations = observationRepository.findRecentByTopicKey(
                 normalize(topicKey) == null ? null : topicKey,
-                PageRequest.of(0, cappedLimit)
-        );
+                PageRequest.of(0, cappedLimit));
 
         List<Map<String, Object>> observationRows = observations.stream()
                 .map(this::toObservationRow)
@@ -336,8 +412,7 @@ public class MemoryService {
                         "status", session.getStatus(),
                         "startedAt", session.getStartedAt(),
                         "endedAt", session.getEndedAt(),
-                        "summary", session.getSummary() == null ? "" : session.getSummary()
-                ))
+                        "summary", session.getSummary() == null ? "" : session.getSummary()))
                 .toList();
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -346,17 +421,15 @@ public class MemoryService {
 
         if (includePrompts) {
             List<Map<String, Object>> prompts = promptRepository.findRecentByTopicKey(
-                            normalize(topicKey) == null ? null : topicKey,
-                            PageRequest.of(0, cappedLimit)
-                    ).stream()
+                    normalize(topicKey) == null ? null : topicKey,
+                    PageRequest.of(0, cappedLimit)).stream()
                     .map(prompt -> Map.<String, Object>of(
                             "id", prompt.getId(),
                             "sessionId", prompt.getSessionId(),
                             "topicKey", prompt.getTopicKey(),
                             "intent", prompt.getIntent(),
                             "prompt", prompt.getPrompt(),
-                            "createdAt", prompt.getCreatedAt()
-                    ))
+                            "createdAt", prompt.getCreatedAt()))
                     .toList();
             response.put("prompts", prompts);
         }
@@ -373,14 +446,14 @@ public class MemoryService {
         Instant from = center.getCreatedAt().minus(effectiveWindowMinutes, ChronoUnit.MINUTES);
         Instant to = center.getCreatedAt().plus(effectiveWindowMinutes, ChronoUnit.MINUTES);
 
-        List<ObservationEntity> around = observationRepository.findTimeline(from, to, PageRequest.of(0, Math.max(1, limit)));
+        List<ObservationEntity> around = observationRepository.findTimeline(from, to,
+                PageRequest.of(0, Math.max(1, limit)));
 
         return Map.of(
                 "center", toObservationRow(center),
                 "timeline", around.stream().map(this::toObservationRow).toList(),
                 "from", from,
-                "to", to
-        );
+                "to", to);
     }
 
     @Transactional(readOnly = true)
@@ -391,7 +464,7 @@ public class MemoryService {
     }
 
     @Transactional
-    public PromptEntity savePrompt(UUID sessionId, String prompt, String topicKey, String intent, String source) {
+    public PromptEntity savePrompt(String sessionId, String prompt, String topicKey, String intent, String source) {
         if (prompt == null || prompt.isBlank()) {
             throw new IllegalArgumentException("prompt is required");
         }
@@ -411,6 +484,12 @@ public class MemoryService {
         response.put("totalObservations", observationRepository.count());
         response.put("activeObservations", observationRepository.countByDeletedFalse());
         response.put("deletedObservations", observationRepository.countByDeletedTrue());
+
+        Long dupCount = observationRepository.sumDuplicateCountByDeletedFalse();
+        Long revCount = observationRepository.sumRevisionCountByDeletedFalse();
+        response.put("totalDuplicates", dupCount != null ? dupCount : 0L);
+        response.put("totalRevisions", revCount != null ? revCount : 0L);
+
         response.put("savedPrompts", promptRepository.count());
         response.put("sessions", sessionRepository.count());
         response.put("openSessions", sessionRepository.countByStatus("STARTED"));
@@ -495,6 +574,7 @@ public class MemoryService {
         row.put("tags", observation.getTagsText());
         row.put("source", observation.getSource());
         row.put("sessionId", observation.getSessionId());
+        row.put("projectName", observation.getProjectName());
         row.put("createdAt", observation.getCreatedAt());
         row.put("updatedAt", observation.getUpdatedAt());
         row.put("deleted", observation.isDeleted());

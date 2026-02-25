@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
 
 @Entity
 @Table(name = "saved_prompts")
@@ -17,10 +18,12 @@ public class PromptEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @JdbcTypeCode(java.sql.Types.VARCHAR)
+    @Column(columnDefinition = "VARCHAR(36)")
     private UUID id;
 
-    @Column(name = "session_id")
-    private UUID sessionId;
+    @Column(name = "session_id", length = 120)
+    private String sessionId;
 
     @Column(name = "topic_key", length = 120)
     private String topicKey;
@@ -50,11 +53,11 @@ public class PromptEntity {
         this.id = id;
     }
 
-    public UUID getSessionId() {
+    public String getSessionId() {
         return sessionId;
     }
 
-    public void setSessionId(UUID sessionId) {
+    public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
     }
 

@@ -8,7 +8,10 @@ public enum ObservationType {
     PATTERN,
     NOTE,
     SESSION_SUMMARY,
-    PROMPT;
+    PROMPT,
+    ARCHITECTURE,
+    SUMMARY,
+    DOCUMENTATION;
 
     public static ObservationType fromString(String raw) {
         if (raw == null || raw.isBlank()) {

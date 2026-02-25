@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
 
 @Entity
 @Table(name = "observations")
@@ -18,6 +19,8 @@ public class ObservationEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @JdbcTypeCode(java.sql.Types.VARCHAR)
+    @Column(columnDefinition = "VARCHAR(36)")
     private UUID id;
 
     @Column(nullable = false, length = 40)
@@ -38,8 +41,29 @@ public class ObservationEntity {
     @Column(length = 120)
     private String source;
 
-    @Column(name = "session_id")
-    private UUID sessionId;
+    @Column(name = "session_id", length = 120)
+    private String sessionId;
+
+    @Column(nullable = false, length = 50)
+    private String scope = "project";
+
+    @Column(name = "project_key", nullable = false, length = 100)
+    private String projectKey = "default";
+
+    @Column(name = "project_name", length = 100)
+    private String projectName;
+
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    @Column(name = "duplicate_count", nullable = false)
+    private int duplicateCount = 0;
+
+    @Column(name = "revision_count", nullable = false)
+    private int revisionCount = 1;
+
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
 
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
@@ -121,11 +145,11 @@ public class ObservationEntity {
         this.source = source;
     }
 
-    public UUID getSessionId() {
+    public String getSessionId() {
         return sessionId;
     }
 
-    public void setSessionId(UUID sessionId) {
+    public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
     }
 
@@ -159,5 +183,61 @@ public class ObservationEntity {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
+    public String getProjectKey() {
+        return projectKey;
+    }
+
+    public void setProjectKey(String projectKey) {
+        this.projectKey = projectKey;
+    }
+
+    public String getProjectName() {
+        return projectName;
+    }
+
+    public void setProjectName(String projectName) {
+        this.projectName = projectName;
+    }
+
+    public String getContentHash() {
+        return contentHash;
+    }
+
+    public void setContentHash(String contentHash) {
+        this.contentHash = contentHash;
+    }
+
+    public int getDuplicateCount() {
+        return duplicateCount;
+    }
+
+    public void setDuplicateCount(int duplicateCount) {
+        this.duplicateCount = duplicateCount;
+    }
+
+    public int getRevisionCount() {
+        return revisionCount;
+    }
+
+    public void setRevisionCount(int revisionCount) {
+        this.revisionCount = revisionCount;
+    }
+
+    public Instant getLastSeenAt() {
+        return lastSeenAt;
+    }
+
+    public void setLastSeenAt(Instant lastSeenAt) {
+        this.lastSeenAt = lastSeenAt;
     }
 }

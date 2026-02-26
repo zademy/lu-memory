@@ -3,6 +3,10 @@ package com.zademy.lu_memory.services;
 import com.zademy.lu_memory.entitys.ObservationEntity;
 import com.zademy.lu_memory.entitys.PromptEntity;
 import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.constants.AppConstants;
+import com.zademy.lu_memory.constants.ErrorMessages;
+import com.zademy.lu_memory.constants.ResponseKeys;
+import com.zademy.lu_memory.constants.SessionStatus;
 import com.zademy.lu_memory.models.ObservationRecord;
 import com.zademy.lu_memory.models.PromptRecord;
 import com.zademy.lu_memory.models.SessionRecord;
@@ -89,7 +93,7 @@ public class MemoryService {
         SessionEntity session = new SessionEntity();
         session.setAgentName(normalize(agentName));
         session.setBranchName(normalize(branchName));
-        session.setStatus("STARTED");
+        session.setStatus(SessionStatus.STARTED.name());
         return toSessionRecord(sessionRepository.save(session));
     }
 
@@ -105,9 +109,10 @@ public class MemoryService {
     @Transactional
     public SessionRecord endSession(UUID sessionId, String status, String summary) {
         SessionEntity session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.SESSION_NOT_FOUND + sessionId));
 
-        session.setStatus(normalize(status) == null ? "COMPLETED" : status.trim().toUpperCase(Locale.ROOT));
+        session.setStatus(
+                normalize(status) == null ? SessionStatus.COMPLETED.name() : status.trim().toUpperCase(Locale.ROOT));
 
         String normSummary = normalize(summary);
         if (normSummary != null) {
@@ -153,14 +158,15 @@ public class MemoryService {
             String source,
             String projectName) {
         if (content == null || content.isBlank()) {
-            throw new IllegalArgumentException("content is required");
+            throw new IllegalArgumentException(ErrorMessages.CONTENT_REQUIRED);
         }
 
         // Sanitize content (redact <private>...</private>)
         String sanitizedContent = content.replaceAll("(?s)<private>.*?</private>", "[REDACTED]");
-        String actualScope = normalize(scope) == null ? "project" : scope.trim().toLowerCase(Locale.ROOT);
+        String actualScope = normalize(scope) == null ? AppConstants.DEFAULT_SCOPE
+                : scope.trim().toLowerCase(Locale.ROOT);
         String actualTopicKey = resolveTopicKey(topicKey, title, sanitizedContent);
-        String projectKey = "default";
+        String projectKey = AppConstants.DEFAULT_PROJECT_KEY;
         String contentHash = computeHash(sanitizedContent);
 
         // Check for existing observations to handle de-duplication or revisions
@@ -202,7 +208,8 @@ public class MemoryService {
         observation.setDeleted(false);
         observation.setScope(actualScope);
         observation.setProjectKey(projectKey);
-        observation.setProjectName(normalize(projectName) != null ? normalize(projectName) : "default");
+        observation.setProjectName(
+                normalize(projectName) != null ? normalize(projectName) : AppConstants.DEFAULT_PROJECT_NAME);
         observation.setContentHash(contentHash);
         observation.setDuplicateCount(0);
         observation.setRevisionCount(1);
@@ -259,7 +266,7 @@ public class MemoryService {
             String tags,
             String projectName) {
         ObservationEntity observation = observationRepository.findById(observationId)
-                .orElseThrow(() -> new IllegalArgumentException("Observation not found: " + observationId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
         if (normalize(type) != null) {
             observation.setType(ObservationType.fromString(type).name());
@@ -295,21 +302,21 @@ public class MemoryService {
     @Transactional
     public Map<String, Object> deleteObservation(UUID observationId, boolean hardDelete) {
         ObservationEntity observation = observationRepository.findById(observationId)
-                .orElseThrow(() -> new IllegalArgumentException("Observation not found: " + observationId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
         if (hardDelete) {
             observationRepository.delete(observation);
             return Map.of(
-                    "id", observationId,
-                    "status", "HARD_DELETED");
+                    ResponseKeys.ID, observationId,
+                    ResponseKeys.STATUS, AppConstants.STATUS_HARD_DELETED);
         }
 
         observation.setDeleted(true);
         observation.setDeletedAt(Instant.now());
         observationRepository.save(observation);
         return Map.of(
-                "id", observationId,
-                "status", "SOFT_DELETED");
+                ResponseKeys.ID, observationId,
+                ResponseKeys.STATUS, AppConstants.STATUS_SOFT_DELETED);
     }
 
     /**
@@ -325,7 +332,7 @@ public class MemoryService {
     public String suggestTopicKey(String topicHint, String contentHint) {
         String base = slugify(normalize(topicHint) != null ? topicHint : contentHint);
         if (base.isBlank()) {
-            base = "general-memory";
+            base = AppConstants.DEFAULT_TOPIC_KEY;
         }
 
         // Heuristic by family
@@ -334,14 +341,14 @@ public class MemoryService {
         if (!base.contains("/")) {
             if (combined.contains("error") || combined.contains("exception") || combined.contains("bug")
                     || combined.contains("fix")) {
-                base = "bug/" + base.replace("bug-", "").replace("error-", "");
+                base = AppConstants.NAMESPACE_BUG + base.replace("bug-", "").replace("error-", "");
             } else if (combined.contains("architecture") || combined.contains("design")
                     || combined.contains("database")) {
-                base = "architecture/" + base;
+                base = AppConstants.NAMESPACE_ARCHITECTURE + base;
             } else if (combined.contains("deploy") || combined.contains("ci/cd") || combined.contains("docker")) {
-                base = "devops/" + base;
+                base = AppConstants.NAMESPACE_DEVOPS + base;
             } else if (combined.contains("pattern") || combined.contains("refactor")) {
-                base = "pattern/" + base;
+                base = AppConstants.NAMESPACE_PATTERN + base;
             }
         }
 
@@ -393,14 +400,14 @@ public class MemoryService {
 
             return jdbcTemplate.query(sql, (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
-                row.put("id", rs.getString("id"));
-                row.put("type", rs.getString("type"));
-                row.put("topicKey", rs.getString("topic_key"));
-                row.put("title", rs.getString("title"));
-                row.put("snippet", toSnippet(rs.getString("content")));
-                row.put("score", rs.getDouble("score"));
-                row.put("createdAt", rs.getTimestamp("created_at").toInstant());
-                row.put("deleted", rs.getBoolean("deleted"));
+                row.put(ResponseKeys.ID, rs.getString("id"));
+                row.put(ResponseKeys.TYPE, rs.getString("type"));
+                row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
+                row.put(ResponseKeys.TITLE, rs.getString("title"));
+                row.put(ResponseKeys.SNIPPET, toSnippet(rs.getString("content")));
+                row.put(ResponseKeys.SCORE, rs.getDouble("score"));
+                row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
+                row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
                 return row;
             }, query, limit);
         } catch (Exception e) {
@@ -432,14 +439,14 @@ public class MemoryService {
         String searchTerm = "%" + query + "%";
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", rs.getString("id"));
-            row.put("type", rs.getString("type"));
-            row.put("topicKey", rs.getString("topic_key"));
-            row.put("title", rs.getString("title"));
-            row.put("snippet", toSnippet(rs.getString("content")));
-            row.put("score", 0.0);
-            row.put("createdAt", rs.getTimestamp("created_at").toInstant());
-            row.put("deleted", rs.getBoolean("deleted"));
+            row.put(ResponseKeys.ID, rs.getString("id"));
+            row.put(ResponseKeys.TYPE, rs.getString("type"));
+            row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
+            row.put(ResponseKeys.TITLE, rs.getString("title"));
+            row.put(ResponseKeys.SNIPPET, toSnippet(rs.getString("content")));
+            row.put(ResponseKeys.SCORE, 0.0);
+            row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
+            row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
             return row;
         }, searchTerm, searchTerm, searchTerm, searchTerm, limit);
     }
@@ -484,16 +491,16 @@ public class MemoryService {
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", rs.getObject("id", UUID.class));
-            row.put("type", rs.getString("type"));
-            row.put("topicKey", rs.getString("topic_key"));
-            row.put("title", rs.getString("title"));
-            row.put("content", rs.getString("content"));
-            row.put("highlightedContent", rs.getString("highlighted_content"));
-            row.put("tags", rs.getString("tags_text"));
-            row.put("score", rs.getDouble("score"));
-            row.put("createdAt", rs.getTimestamp("created_at").toInstant());
-            row.put("deleted", rs.getBoolean("deleted"));
+            row.put(ResponseKeys.ID, rs.getObject("id", UUID.class));
+            row.put(ResponseKeys.TYPE, rs.getString("type"));
+            row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
+            row.put(ResponseKeys.TITLE, rs.getString("title"));
+            row.put(ResponseKeys.CONTENT, rs.getString("content"));
+            row.put(ResponseKeys.HIGHLIGHTED_CONTENT, rs.getString("highlighted_content"));
+            row.put(ResponseKeys.TAGS, rs.getString("tags_text"));
+            row.put(ResponseKeys.SCORE, rs.getDouble("score"));
+            row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
+            row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
             return row;
         }, ftsQuery, limit);
     }
@@ -531,7 +538,7 @@ public class MemoryService {
     @Transactional
     public ObservationRecord saveSessionSummary(UUID sessionId, String summary, String lessonsLearned) {
         SessionEntity session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.SESSION_NOT_FOUND + sessionId));
 
         String merged = summary;
         if (normalize(lessonsLearned) != null) {
@@ -575,14 +582,15 @@ public class MemoryService {
                 .map(this::toObservationRow)
                 .toList();
 
-        List<Map<String, Object>> sessions = sessionRepository.findTop10ByStatusOrderByStartedAtDesc("COMPLETED")
+        List<Map<String, Object>> sessions = sessionRepository
+                .findTop10ByStatusOrderByStartedAtDesc(SessionStatus.COMPLETED.name())
                 .stream()
                 .map(session -> Map.<String, Object>of(
-                        "id", session.getId(),
-                        "status", session.getStatus(),
-                        "startedAt", session.getStartedAt(),
-                        "endedAt", session.getEndedAt(),
-                        "summary", session.getSummary() == null ? "" : session.getSummary()))
+                        ResponseKeys.ID, session.getId(),
+                        ResponseKeys.STATUS, session.getStatus(),
+                        ResponseKeys.STARTED_AT, session.getStartedAt(),
+                        ResponseKeys.ENDED_AT, session.getEndedAt(),
+                        ResponseKeys.SUMMARY, session.getSummary() == null ? "" : session.getSummary()))
                 .toList();
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -594,12 +602,12 @@ public class MemoryService {
                     normalize(topicKey) == null ? null : topicKey,
                     PageRequest.of(0, cappedLimit)).stream()
                     .map(prompt -> Map.<String, Object>of(
-                            "id", prompt.getId(),
-                            "sessionId", prompt.getSessionId(),
-                            "topicKey", prompt.getTopicKey(),
-                            "intent", prompt.getIntent(),
-                            "prompt", prompt.getPrompt(),
-                            "createdAt", prompt.getCreatedAt()))
+                            ResponseKeys.ID, prompt.getId(),
+                            ResponseKeys.SESSION_ID, prompt.getSessionId(),
+                            ResponseKeys.TOPIC_KEY, prompt.getTopicKey(),
+                            ResponseKeys.INTENT, prompt.getIntent(),
+                            ResponseKeys.PROMPT, prompt.getPrompt(),
+                            ResponseKeys.CREATED_AT, prompt.getCreatedAt()))
                     .toList();
             response.put("prompts", prompts);
         }
@@ -619,7 +627,7 @@ public class MemoryService {
     @Transactional(readOnly = true)
     public Map<String, Object> timeline(UUID observationId, int windowMinutes, int limit) {
         ObservationEntity center = observationRepository.findByIdAndDeletedFalse(observationId)
-                .orElseThrow(() -> new IllegalArgumentException("Observation not found: " + observationId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
         int effectiveWindowMinutes = Math.max(1, windowMinutes);
         Instant from = center.getCreatedAt().minus(effectiveWindowMinutes, ChronoUnit.MINUTES);
@@ -629,10 +637,10 @@ public class MemoryService {
                 PageRequest.of(0, Math.max(1, limit)));
 
         return Map.of(
-                "center", toObservationRow(center),
-                "timeline", around.stream().map(this::toObservationRow).toList(),
-                "from", from,
-                "to", to);
+                ResponseKeys.CENTER, toObservationRow(center),
+                ResponseKeys.TIMELINE, around.stream().map(this::toObservationRow).toList(),
+                ResponseKeys.FROM, from,
+                ResponseKeys.TO, to);
     }
 
     /**
@@ -644,7 +652,7 @@ public class MemoryService {
     @Transactional(readOnly = true)
     public Map<String, Object> getObservation(UUID observationId) {
         ObservationEntity observation = observationRepository.findById(observationId)
-                .orElseThrow(() -> new IllegalArgumentException("Observation not found: " + observationId));
+                .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
         return toObservationRow(observation);
     }
 
@@ -663,7 +671,7 @@ public class MemoryService {
     @Transactional
     public PromptRecord savePrompt(String sessionId, String prompt, String topicKey, String intent, String source) {
         if (prompt == null || prompt.isBlank()) {
-            throw new IllegalArgumentException("prompt is required");
+            throw new IllegalArgumentException(ErrorMessages.PROMPT_REQUIRED);
         }
 
         PromptEntity promptEntity = new PromptEntity();
@@ -684,18 +692,18 @@ public class MemoryService {
     @Transactional(readOnly = true)
     public Map<String, Object> stats() {
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("totalObservations", observationRepository.count());
-        response.put("activeObservations", observationRepository.countByDeletedFalse());
-        response.put("deletedObservations", observationRepository.countByDeletedTrue());
+        response.put(ResponseKeys.TOTAL_OBSERVATIONS, observationRepository.count());
+        response.put(ResponseKeys.ACTIVE_OBSERVATIONS, observationRepository.countByDeletedFalse());
+        response.put(ResponseKeys.DELETED_OBSERVATIONS, observationRepository.countByDeletedTrue());
 
         Long dupCount = observationRepository.sumDuplicateCountByDeletedFalse();
         Long revCount = observationRepository.sumRevisionCountByDeletedFalse();
-        response.put("totalDuplicates", dupCount != null ? dupCount : 0L);
-        response.put("totalRevisions", revCount != null ? revCount : 0L);
+        response.put(ResponseKeys.TOTAL_DUPLICATES, dupCount != null ? dupCount : 0L);
+        response.put(ResponseKeys.TOTAL_REVISIONS, revCount != null ? revCount : 0L);
 
-        response.put("savedPrompts", promptRepository.count());
-        response.put("sessions", sessionRepository.count());
-        response.put("openSessions", sessionRepository.countByStatus("STARTED"));
+        response.put(ResponseKeys.SAVED_PROMPTS, promptRepository.count());
+        response.put(ResponseKeys.SESSIONS, sessionRepository.count());
+        response.put(ResponseKeys.OPEN_SESSIONS, sessionRepository.countByStatus(SessionStatus.STARTED.name()));
 
         String topTopicsSql = """
                 SELECT topic_key, count(*) AS total
@@ -708,11 +716,11 @@ public class MemoryService {
 
         List<Map<String, Object>> topTopics = jdbcTemplate.query(topTopicsSql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("topicKey", rs.getString("topic_key"));
-            row.put("count", rs.getLong("total"));
+            row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
+            row.put(ResponseKeys.COUNT, rs.getLong("total"));
             return row;
         });
-        response.put("topTopics", topTopics);
+        response.put(ResponseKeys.TOP_TOPICS, topTopics);
 
         return response;
     }
@@ -792,19 +800,19 @@ public class MemoryService {
      */
     private Map<String, Object> toObservationRow(ObservationEntity observation) {
         Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", observation.getId());
-        row.put("type", observation.getType());
-        row.put("topicKey", observation.getTopicKey());
-        row.put("title", observation.getTitle());
-        row.put("content", observation.getContent());
-        row.put("tags", observation.getTagsText());
-        row.put("source", observation.getSource());
-        row.put("sessionId", observation.getSessionId());
-        row.put("projectName", observation.getProjectName());
-        row.put("createdAt", observation.getCreatedAt());
-        row.put("updatedAt", observation.getUpdatedAt());
-        row.put("deleted", observation.isDeleted());
-        row.put("deletedAt", observation.getDeletedAt());
+        row.put(ResponseKeys.ID, observation.getId());
+        row.put(ResponseKeys.TYPE, observation.getType());
+        row.put(ResponseKeys.TOPIC_KEY, observation.getTopicKey());
+        row.put(ResponseKeys.TITLE, observation.getTitle());
+        row.put(ResponseKeys.CONTENT, observation.getContent());
+        row.put(ResponseKeys.TAGS, observation.getTagsText());
+        row.put(ResponseKeys.SOURCE, observation.getSource());
+        row.put(ResponseKeys.SESSION_ID, observation.getSessionId());
+        row.put(ResponseKeys.PROJECT_NAME, observation.getProjectName());
+        row.put(ResponseKeys.CREATED_AT, observation.getCreatedAt());
+        row.put(ResponseKeys.UPDATED_AT, observation.getUpdatedAt());
+        row.put(ResponseKeys.DELETED, observation.isDeleted());
+        row.put(ResponseKeys.DELETED_AT, observation.getDeletedAt());
         return row;
     }
 

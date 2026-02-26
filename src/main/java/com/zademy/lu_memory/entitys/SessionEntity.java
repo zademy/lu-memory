@@ -1,5 +1,6 @@
 package com.zademy.lu_memory.entitys;
 
+import com.zademy.lu_memory.constants.SessionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -48,7 +49,7 @@ public class SessionEntity {
     void onCreate() {
         this.startedAt = Instant.now();
         if (this.status == null || this.status.isBlank()) {
-            this.status = "STARTED";
+            this.status = SessionStatus.STARTED.name();
         }
     }
 

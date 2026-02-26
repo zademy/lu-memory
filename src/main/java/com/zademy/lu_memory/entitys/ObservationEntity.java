@@ -1,5 +1,6 @@
 package com.zademy.lu_memory.entitys;
 
+import com.zademy.lu_memory.constants.AppConstants;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -51,10 +52,10 @@ public class ObservationEntity {
     private String sessionId;
 
     @Column(nullable = false, length = 50)
-    private String scope = "project";
+    private String scope = AppConstants.DEFAULT_SCOPE;
 
     @Column(name = "project_key", nullable = false, length = 100)
-    private String projectKey = "default";
+    private String projectKey = AppConstants.DEFAULT_PROJECT_KEY;
 
     @Column(name = "project_name", length = 100)
     private String projectName;

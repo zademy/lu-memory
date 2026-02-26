@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Maintained and authored by **zademy**.
 - Initial project architecture inspired by the Gentleman-Programming/engram concept.
 - Setup Model Context Protocol (MCP) server core for Java/Spring Boot.
 - Integration with SQLite for long-term memory management using FTS5 (Full-Text Search).

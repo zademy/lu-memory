@@ -1,36 +1,42 @@
 # 🧠 lu-memory - MCP Memory Server
 
 ![Java Version](https://img.shields.io/badge/Java-25-orange.svg)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.x-brightgreen.svg)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0.3-brightgreen.svg)
 ![Protocol](https://img.shields.io/badge/MCP-Supported-blue.svg)
-![Database](https://img.shields.io/badge/SQLite-JPA-blueviolet.svg)
+![Database](https://img.shields.io/badge/SQLite-JPA_&_FTS5-blueviolet.svg)
 
-**lu-memory** is a robust, lightweight **Model Context Protocol (MCP)** server built with **Java** and **Spring Boot**. It acts as an external persistent memory service, allowing AI assistants and agents to build and maintain context across multiple sessions, document architectural decisions, log bugs, and store structured observations seamlessly.
+**lu-memory** is a robust, lightweight **Model Context Protocol (MCP)** server built with **Java 25** and **Spring Boot**. It acts as an external persistent memory service, allowing AI assistants and agents to build and maintain long-term context across multiple sessions, document architectural decisions, log bugs, and store structured observations seamlessly.
 
 ---
 
 ## 🚀 Features & Capabilities
 
-- **Session Management**: Explicitly start and end logical chat sessions, keeping a clean timeline of tasks.
+- **Session Management**: Explicitly start and end logical chat sessions, keeping a clean timeline of tasks and comprehensive summaries.
 - **Categorized Observations**: Save memories by granular types: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, and `DOCUMENTATION`.
-- **Full-Text Context Recovery**: Powered by SQLite FTS, instantly retrieve chronological timelines around past observations.
-- **Advanced Search**: Advanced search capabilities with result highlighting and relevance ranking.
+- **Full-Text Context Recovery**: Powered by SQLite FTS5 (Full-Text Search), instantly retrieve chronological timelines around past observations.
+- **Advanced Search**: High-performance BM25 ranking and result highlighting for deep context retrieval.
 - **Topic & Tag Tracking**: Group related memories by dynamic, evolving "topics" with stable topic keys, and use custom tags for high search precision.
+- **Deduplication & Revision Tracking**: Automatically handles content deduplication by hashing (`SHA-256`) and tracks revision counts.
+- **Prompt Templating**: Save reusable instructional prompts as templates via `mem_save_prompt`.
 - **Multi-Tenant / Scopes**: Differentiate local project memory from personal/global memory scopes.
 
 ## 🏗️ Architecture & Design Principles
 
-By acting as a dedicated MCP daemon, `lu-memory` decouples context persistence from the LLM context window itself, embracing a **Modular Monolith** and **Clean Architecture** approach.
+The application is structured as a **Modular Monolith** applying **Clean Architecture** patterns, ensuring high extensibility and testability.
 
-- **CQRS / Domain-Driven Data**: Writes (observations, summaries) are handled defensively, while Reads (timeline, FTS search) leverage optimized SQLite indices.
-- **Single Responsibility Principle (SOLID)**: Each MCP tool encapsulates exactly one action against the persistence layer.
+- **CQRS (Command Query Responsibility Segregation)**: Writes (observations, session states) are handled defensively with complete state updates, while Reads leverage highly optimized SQLite FTS5 indices for high-performance retrieval and timeline sequencing.
+- **SOLID Principles**:
+  - _Single Responsibility Principle (SRP)_: Each domain entity (Session, Observation, Prompt) has designated repositories. The `MemoryTools` class bridges MCP boundaries while relying entirely on `MemoryService` for business logic.
+  - _Open/Closed Principle (OCP)_: The search capabilities gracefully fall back to LIKE-based SQL patterns if FTS5 is not available.
+  - _Dependency Inversion Principle (DIP)_: Services rely strictly on Data Access abstractions (Spring Data JPA) to decouple business logic from the SQLite dialect.
+- **Event-Driven Resilience**: Leveraging SQLite Triggers allows immediate synchronization between atomic observation tables and their associated FTS5 virtual indexing without polluting the application layer with dual-write concerns.
 
 ## 🛠 Tech Stack
 
 - **Core & Runtime**: Java 25
-- **Framework & MCP Integration**: Spring Boot 4.x, Spring AI (`spring-ai-starter-mcp-server`)
-- **Persistence**: SQLite (via `sqlite-jdbc` and `spring-boot-starter-data-jpa`)
-- **Build Server**: Maven
+- **Framework & MCP Integration**: Spring Boot 4.x, Spring AI (`spring-ai-starter-mcp-server` 2.0.0-M2)
+- **Persistence**: SQLite (via `sqlite-jdbc` 3.45.1.0 and `spring-boot-starter-data-jpa`)
+- **Build System**: Maven Wrapper (`mvnw`)
 
 ---
 
@@ -40,19 +46,18 @@ By acting as a dedicated MCP daemon, `lu-memory` decouples context persistence f
 
 - **Java JDK 25** or higher configured in your environment.
 - **Maven** (optional, as the repository includes `mvnw`).
-- **SQLite 3** installed and available in your environment (either installed via a package manager/installer or downloaded as a standalone zip archive and added to your system `PATH`).
+- **SQLite 3** installed and available in your environment.
 
 ### Installation & Execution
 
-1. Clone this repository.
-2. Navigate to the project root directory.
-3. **Initialize the SQLite database** by executing the provided schema script (which configures the FTS5 virtual tables):
+1. Clone this repository and navigate to the root directory.
+2. **Initialize the SQLite database** by executing the provided schema script (which configures the FTS5 virtual tables):
 
 ```bash
 sqlite3 lu-memory.db < create-tables.sql
 ```
 
-4. Start the application using the Maven wrapper:
+3. Start the application using the Maven wrapper:
 
 ```bash
 # On Linux / macOS
@@ -90,7 +95,7 @@ _(Adjust the path to your compiled `.jar` and Java runtime executable accordingl
 
 ## 🧰 Available MCP Tools Reference
 
-The server directly provides these tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
+The server directly provides these 14 tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
 
 | Capability Area        | Tool Name               | Description & Usage                                                                          |
 | ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
@@ -99,14 +104,15 @@ The server directly provides these tools via MCP. Agents should leverage them ba
 |                        | `mem_session_summary`   | Saves an end-of-session summary reflecting what was accomplished.                            |
 | **Memory Extraction**  | `mem_context`           | Fetches the most recent context from previous sessions natively upon boot/reset.             |
 |                        | `mem_timeline`          | Retrieves a chronological timeline around a specific observation.                            |
+|                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                        |
 | **Observation Mgmt**   | `mem_save`              | Saves grouped observations. Requires `type`, `tags`, `projectName`, and current `sessionId`. |
 |                        | `mem_save_prompt`       | Saves user-specific prompts as templates. Requires `intent` and `source`.                    |
 |                        | `mem_update`            | Revises an existing observation.                                                             |
-|                        | `mem_delete`            | Performs a soft-delete of an observation.                                                    |
-|                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                        |
-| **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable key for evolving topics.                                                    |
-|                        | `mem_search`            | Standard Full-Text Search across the datastore.                                              |
-|                        | `mem_search_advanced`   | FTS query mechanism returning highlighted insights.                                          |
+|                        | `mem_delete`            | Performs a soft-delete (or hard-delete flag) of an observation.                              |
+| **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable SEO-friendly key for evolving topics.                                       |
+|                        | `mem_search`            | Standard Full-Text Search across the datastore applying SQLite FTS5.                         |
+|                        | `mem_search_advanced`   | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring.         |
+| **System Info**        | `mem_stats`             | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.      |
 
 ---
 
@@ -140,5 +146,8 @@ When committing large or architectural content via `mem_save`, utilize the follo
 
 ## 📚 Further Reading
 
-- [Security Policy](SECURITY.md) guidelines and vulnerability reporting.
-- [Help Document](HELP.md) extended application resources and operations.
+- [Security Policy](SECURITY.md): Guidelines and vulnerability reporting.
+- [Help Document](HELP.md): Extended application resources and operations.
+- [Changelog](CHANGELOG.md): History of feature updates.
+- [Contributing](CONTRIBUTING.adoc): Rules and guide to help code logic directly.
+- [Code of Conduct](CODE_OF_CONDUCT.md): Project collaboration standard.

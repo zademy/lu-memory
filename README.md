@@ -144,7 +144,25 @@ When committing large or architectural content via `mem_save`, utilize the follo
 
 ---
 
-## 📚 Further Reading
+## � Agent Usage Rules
+
+For agents using lu-memory, the complete usage rules and examples are located in:
+
+- **`.agents\rules\lu-memory.md`** - Main rule file for agents
+- **`.windsurf\rules\lu-memory.md`** - Windsurf-specific rule file (if exists)
+
+These files contain:
+- Session lifecycle protocols (mandatory start/end procedures)
+- Memory format conventions (What/Why/Where structure)
+- Complete workflow examples
+- Best practices for saving observations and prompts
+- Advanced search and timeline usage patterns
+
+**⚠️ Important**: Agents MUST follow the rules in these files to ensure proper memory management and session handling.
+
+---
+
+## �📚 Further Reading
 
 - [Security Policy](SECURITY.md): Guidelines and vulnerability reporting.
 - [Help Document](HELP.md): Extended application resources and operations.

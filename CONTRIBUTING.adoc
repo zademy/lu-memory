@@ -1,95 +1,92 @@
-= Contribuir a lu-memory
+= Contributing to lu-memory
 :toc: macro
-:toc-title: Tabla de Contenidos
-:icons: font
+:toc-title: Table of Contents
 
-¡Primero que nada, gracias por considerar contribuir a `lu-memory`! Son las contribuciones de la comunidad las que hacen que este servidor MCP (Model Context Protocol) sea cada vez mejor.
+First off, thank you for considering contributing to `lu-memory`! This project is an MCP (Model Context Protocol) Server for long-term memory management using SQLite. It's people like you that make it such a great tool. We welcome contributions from everyone.
 
 toc::[]
 
-== 🤝 Código de Conducta
+== Code of Conduct
+By participating and contributing to this project, you agree to abide by our link:CODE_OF_CONDUCT.md[Code of Conduct]. We expect all contributors to maintain a professional, respectful, and welcoming environment.
 
-Al participar en este proyecto, se espera que mantengas prácticas de respeto y colaboración propias del código abierto. Por favor, sé inclusivo, respetuoso y constructivo en todas tus interacciones.
+== Getting Started
+To get started with development, you will need the following tools installed on your system:
 
-== ⚙️ Configuración y Desarrollo
+* Java Development Kit (JDK) 17 or higher
+* Apache Maven (or use the provided `mvnw` wrapper)
+* SQLite (the JDBC driver will handle local db creation automatically)
 
-### Requisitos Previos
-
-* *Java JDK 25* o superior.
-* *Maven* (el proyecto incluye un wrapper de Maven `mvnw`, por lo que no es estrictamente necesario tenerlo instalado a nivel global).
-* *Git*.
-
-### Construir desde el Código Fuente
-
-1. Clona el repositorio:
-+
+=== Setting up the Development Environment
+1. Fork the repository and clone it to your local machine:
 [source,bash]
 ----
-git clone <url_del_repositorio>
+git clone https://github.com/zademy/lu-memory.git
+----
+2. Navigate to the project directory:
+[source,bash]
+----
 cd lu-memory
 ----
-
-2. Compila el proyecto utilizando el wrapper de Maven:
-+
+3. Build the project using the Maven wrapper:
 [source,bash]
 ----
 ./mvnw clean install
 ----
-+
-_(En Windows, utiliza `mvnw.cmd clean install`)_
 
-3. Ejecuta la aplicación:
-+
+== How to Contribute
+
+=== Reporting Bugs
+If you find a bug, please create an Issue in the GitHub repository. Provide as much related information as possible:
+* Clear steps to reproduce the bug.
+* The expected outcome versus the actual behavior.
+* Environment details (OS, JDK version, memory setup, etc.).
+* Any relevant stack traces, logs, or screenshots.
+
+=== Suggesting Enhancements
+We are always looking for ways to improve the `lu-memory` capabilities. If you have a feature request or an enhancement idea, please open an Issue describing:
+* The problem or limitation you have encountered.
+* Your proposed solution or new feature.
+* Real-world use cases where this feature would be helpful.
+* Any alternative approaches you might have considered.
+
+=== Submitting Pull Requests
+We gladly accept Pull Requests (PRs). When submitting one:
+
+1. **Create a new branch** from `main` for your feature or bug fix:
 [source,bash]
 ----
-./mvnw spring-boot:run
+git checkout -b feature/my-awesome-feature
 ----
+or
+[source,bash]
+----
+git checkout -b fix/issue-123
+----
+2. **Implement your changes**, ensuring the project builds successfully without any warnings.
+3. **Write tests** to cover your new functionality or prove that the bug was fixed.
+4. **Commit your changes** using clear and descriptive commit messages.
+5. **Push** your branch to your fork.
+6. Open a **Pull Request** against the up-stream `main` branch. Provide a comprehensive description of the changes inside the PR template.
 
-El proyecto utiliza **SQLite** como base de datos, la cual se creará automáticamente en el entorno local gracias a la configuración de JPA.
+== Architecture & Coding Guidelines
+As a contributor, please keep in mind the following principles when modifying the source code:
 
-== 🐞 Reporte de Bugs
+* **Java Conventions**: Follow standard Java coding conventions.
+* **SOLID Principles**: Keep components modular, testable, and maintainable. Use interfaces to define contracts where appropriate.
+* **Clean Code**: Use meaningful self-documenting names for variables, methods, and classes. Keep methods focused on doing one thing well.
+* **Documentation**: Document any complex logic, and update relevant Markdown / AsciiDoc files if introducing new commands or workflows.
 
-Si encuentras algún error o comportamiento inesperado, por favor crea un *Issue* en el repositorio. Asegúrate de incluir:
-
-* Un título claro y descriptivo.
-* Los pasos exactos para reproducir el problema.
-* El comportamiento esperado vs. el comportamiento actual.
-* Trazas de error (stack traces) o logs del servidor, si aplican (por favor, usa bloques de código para formatearlos).
-* Detalles de tu entorno (Sistema Operativo, versión de Java/Spring).
-
-== 💡 Sugerir Mejoras
-
-¡Las nuevas ideas son siempre bienvenidas! Para proponer una nueva funcionalidad o mejora:
-
-* Abre un *Issue* describiendo la mejora.
-* Explica *por qué* esta mejora sería útil o cómo mejoraría la interacción de los agentes de IA con el servidor MCP.
-* Si tienes una idea de cómo implementarlo a nivel técnico (ej. nuevos endpoints de MCP, cambios en entidades de base de datos), inclúyelo allí.
-
-== 🛠️ Proceso de Pull Request (PR)
-
-1. Haz un **Fork** del repositorio y crea tu rama a partir de `main`.
-2. **Nomenclatura de ramas**: Usa un nombre descriptivo para tu rama, como `feature/nueva-herramienta-mcp` o `fix/error-busqueda-fts`.
-3. Si estás agregando código nuevo que requiera pruebas, por favor añade los tests correspondientes.
-4. Actualiza el `README.md` o cualquier otra documentación relevante si tus cambios afectan la interfaz pública o la configuración.
-5. Asegúrate de que las pruebas automatizadas pasen exitosamente ejecutando:
-+
+== Testing
+We use JUnit and Spring Boot Testing utilities. Please make sure that all existing tests pass before pushing:
 [source,bash]
 ----
 ./mvnw test
 ----
-6. ¡Abre tu Pull Request!
+If you are adding an entirely new MCP tool, consider adding unit/integration tests to verify that the tool handles edge cases and interacts correctly with the underlying SQLite (`lu-memory.db`) storage.
 
-== 💻 Guías de Programación
+== Database Changes
+If your contribution modifies the core memory schema (e.g., editing `create-tables.sql`), ensure that:
+* The FTS5 (Full-Text Search) mechanisms are left intact or updated accurately.
+* Backwards compatibility is preserved, or explicit migration guidance is provided.
 
-* **Lenguaje y Framework**: Desarrollamos en *Java 25* y *Spring Boot 4.x*. Por favor, sigue las convenciones modernas de Java.
-* **Arquitectura MCP**: El proyecto se centra en exponer herramientas (tools) para agentes LLM a través del Model Context Protocol utilizando `spring-ai-starter-mcp-server`. Cualquier nueva "herramienta" debe seguir esta filosofía y registrarse adecuadamente.
-* **Base de datos**: Usamos SQLite integrado con JPA/Hibernate. Evita consultas SQL nativas específicas de un motor a menos que sea estrictamente necesario (ej. búsquedas FTS de SQLite), para mantener el código lo más limpio posible.
-* **Compatibilidad**: Si modificas las entidades de las memorias (Observaciones, Sesiones, Prompts), asegúrate de tener en cuenta la retrocompatibilidad, ya que los usuarios tendrán bases de datos SQLite locales existentes.
-
-== 📝 Mensajes de Commit
-
-* Usa el tiempo presente en imperativo ("Añade funcionalidad" en vez de "Añadí funcionalidad" o "Añadida funcionalidad").
-* Limita la primera línea a 72 caracteres o menos.
-* Haz referencia a los números de Issues o PRs si es que aplican.
-
-¡Gracias de nuevo por tu interés en mejorar `lu-memory`!
+Thank you again for contributing to `lu-memory`! Your efforts help make this project better for everyone.

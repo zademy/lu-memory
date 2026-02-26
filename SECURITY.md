@@ -1,35 +1,35 @@
-# Política de Seguridad
+# Security Policy
 
-## Versiones Soportadas
+## Supported Versions
 
-A continuación se muestran las versiones de `lu-memory` que actualmente reciben actualizaciones de seguridad.
+Below are the versions of `lu-memory` that currently receive security updates.
 
-| Versión | Soporte            | Notas                        |
-| ------- | ------------------ | ---------------------------- |
-| 0.0.1.x | :white_check_mark: | Versión en desarrollo activo |
-| < 0.0.1 | :x:                | Sin soporte                  |
+| Version | Supported          | Notes                      |
+| ------- | ------------------ | -------------------------- |
+| 0.0.1.x | :white_check_mark: | Active development version |
+| < 0.0.1 | :x:                | Unsupported                |
 
-## Consideraciones de Seguridad del Proyecto
+## Project Security Considerations
 
-Dado que `lu-memory` es un servidor MCP (Model Context Protocol), interactúa de manera local con clientes y agentes de Inteligencia Artificial. Es fundamental en la arquitectura del sistema contemplar las siguientes áreas:
+Since `lu-memory` is a Model Context Protocol (MCP) server, it interacts locally with AI clients and agents. It is critical to consider the following areas within the system's architecture:
 
-- **Almacenamiento Local Seguro**: `lu-memory` utiliza una base de datos local SQLite (`lu-memory.db`) para persistir la información. Para proteger la confidencialidad de los prompts, historiales de sesión y contexto arquitectónico de los proyectos, asegúrate de aplicar permisos estrictos a nivel del sistema operativo. Considera el uso de cifrado en reposo para volúmenes sensibles.
-- **Comunicación MCP (stdio)**: Se apoya en la entrada/salida estándar (`stdio`) para el protocolo. La seguridad del servidor depende en gran medida de que el cliente (ej. Claude Desktop, windsurf, u otros) se ejecute en un entorno confiable, limitando quién puede invocar dicho proceso.
-- **Entorno de Ejecución**: El proyecto funciona sobre **Java 25** y **Spring Boot**. Como buena práctica, mantén siempre actualizadas las dependencias definidas en tu `pom.xml` para mitigar vulnerabilidades de la cadena de suministro, siguiendo el principio de _Security by Design_.
+- **Secure Local Storage**: `lu-memory` uses a local SQLite database (`lu-memory.db`) to persist information. To protect the confidentiality of prompts, session history, and architectural context of projects, ensure you apply strict permissions at the OS level. Consider using encryption at rest for sensitive volumes.
+- **MCP Communication (stdio)**: It relies on standard input/output (`stdio`) for the protocol. The server's security heavily depends on the client (e.g., Claude Desktop, Windsurf, or others) running in a trusted environment, limiting who can invoke the process.
+- **Runtime Environment**: The project runs on **Java 25** and **Spring Boot**. As a best practice, always keep dependencies defined in your `pom.xml` updated to mitigate supply chain vulnerabilities, following the principle of _Security by Design_.
 
-## Reportar una Vulnerabilidad
+## Reporting a Vulnerability
 
-Tomamos la seguridad de `lu-memory` muy en serio. Si descubres una vulnerabilidad de seguridad, arquitectura o falla conceptual en este proyecto, te pedimos que la reportes de manera privada. **No la divulgues públicamente** (por ejemplo, creando un Issue público) hasta que se haya evaluado e implementado una solución.
+We take the security of `lu-memory` very seriously. If you discover a security vulnerability, architectural flaw, or conceptual failure in this project, we ask that you report it privately. **Do not disclose it publicly** (e.g., by creating a public Issue) until it has been evaluated and a solution has been implemented.
 
-Por favor, reporta cualquier vulnerabilidad:
+Please report any vulnerability:
 
-- A través de la función de **Aviso de Seguridad Privado (Private Vulnerability Reporting)** en GitHub de este repositorio.
-- O contactando al equipo directo de mantenimiento si tienes los correos habilitados.
+- Through the **Private Vulnerability Reporting** feature on this repository's GitHub.
+- Or by directly contacting the maintenance team if you have the emails enabled.
 
-Al crear el reporte, por favor incluye:
+When creating the report, please include:
 
-1. Una descripción detallada de la vulnerabilidad o falla de diseño de seguridad.
-2. Pasos concretos para reproducir el problema.
-3. Una evaluación del posible impacto en arquitecturas que utilicen este MCP.
+1. A detailed description of the vulnerability or security design flaw.
+2. Concrete steps to reproduce the issue.
+3. An assessment of the potential impact on architectures using this MCP.
 
-El equipo se compromete a revisar el caso a la brevedad y proporcionar próximos pasos antes de cualquier divulgación.
+The team commits to reviewing the case promptly and providing next steps prior to any disclosure.

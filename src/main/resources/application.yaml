@@ -30,15 +30,21 @@ spring:
     hibernate:
       ddl-auto: none
     properties:
-      "[hibernate.hbm2ddl.auto]": none
       "[hibernate.format_sql]": true
       "[hibernate.dialect]": org.hibernate.community.dialect.SQLiteDialect
       "[hibernate.jdbc.batch_size]": 1
       "[hibernate.order_inserts]": true
       "[hibernate.order_updates]": true
-      "[hibernate.boot.allow_jdbc_metadata_access]": false
     show-sql: false
-    defer-datasource-initialization: true
+    open-in-view: false
 
-# Logging is now handled by logback-spring.xml to ensure stdio protocol integrity.
-# Redundant properties removed.
+logging:
+  file:
+    name: ${LOG_FILE:logs/mcp-lu-memory-stdio-server.log}
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p %c{1} - %m%n"
+  level:
+    root: ERROR
+    com.zademy.lu_memory: INFO
+    org.springframework: ERROR
+    org.hibernate: ERROR

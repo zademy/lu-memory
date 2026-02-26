@@ -2,47 +2,68 @@
 trigger: always_on
 ---
 
-Use `mem_context` **siempre al inicio de la sesión** (y después de cualquier reset de contexto) para recuperar el estado de trabajo.
-You have access to long‑term memory via `lu-memory` MCP tools (mem\_\*).
+# 🚨 CRITICAL: Session Lifecycle (MANDATORY)
+
+**AT THE START of EVERY conversation:**
+1. ALWAYS call `mem_context` FIRST to load previous work state
+2. Then call `mem_session_start` to create a new session in `memory_sessions` table
+
+**AT THE END of EVERY conversation:**
+1. ALWAYS call `mem_session_summary` with detailed summary
+2. Then call `mem_session_end` with appropriate status to close the session in `memory_sessions` table
+
+You have access to long‑term memory via `lu-memory` MCP tools (mem\_\*) with **full-text search capabilities** powered by SQLite FTS5.
+
+## Database Tables (Reference)
+
+The `lu-memory` system uses the following SQLite tables:
+
+- **`observations`**: Stores all saved memories/observations
+- **`memory_sessions`**: Records work sessions with start/end/summary
+- **`saved_prompts`**: Saves reusable prompts as templates
+- **`observations_fts`**: FTS5 index for ultra-fast full-text search
+- **`observations_fts_*`**: FTS5 internal tables (config, data, docsize, idx)
+
+Searching with `mem_search` and `mem_search_advanced` leverages the FTS5 index to find relevant memories even with partial or fuzzy searches.
 
 ## Core Principles
 
 1. **Context first**
-   - Inicial de sesión o tras un reset: llama a `mem_context` antes de tomar decisiones importantes.
-   - Para profundizar en un tema: usa el patrón de 3 capas (ver más abajo).
-2. **Save proactively**  
-   Usa `mem_save` sin esperar a que el usuario lo pida cuando:
-   - Se cierre un tema importante.
-   - Se llegue a una decisión de arquitectura o diseño.
-   - Se descubra una causa raíz o un aprendizaje clave.
-   - Se cambie una configuración importante o un flujo de trabajo.
-3. **Topic keys para temas que evolucionan**
-   - Usa `mem_suggest_topic_key` para temas que tendrán muchas revisiones (arquitectura, features grandes, proyectos largos).
-   - Reutiliza siempre el mismo `topic_key` para ese tema.
-4. **Sesiones explícitas (Tabla `memory_sessions`)**
-   - Abre sesiones con `mem_session_start`. **Importante:** Incluye el `agentName` (ej. "Windsurf") y el `branchName` si aplica.
-   - Antes de cerrar, guarda el resumen con `mem_session_summary`.
-   - Cierra siempre con `mem_session_end`, indicando el `status` correcto (`COMPLETED`, `ABORTED` o `FAILED`).
+   - At session start or after a reset: call `mem_context` before making important decisions.
+   - To dive deeper into a topic: use the 3-layer pattern (see below).
+2. **Save proactively**
+   Use `mem_save` without waiting for the user to ask when:
+   - An important topic is closed.
+   - An architecture or design decision is reached.
+   - A root cause or key learning is discovered.
+   - An important configuration or workflow is changed.
+3. **Topic keys for evolving topics**
+   - Use `mem_suggest_topic_key` for topics that will have many revisions (architecture, large features, long projects).
+   - Always reuse the same `topic_key` for that topic.
+4. **Explicit sessions (`memory_sessions` table)**
+   - Open sessions with `mem_session_start`. **Important:** Include the `agentName` (e.g., "Windsurf") and `branchName` if applicable.
+   - Before closing, save the summary with `mem_session_summary`.
+   - Always close with `mem_session_end`, indicating the correct `status` (`COMPLETED`, `ABORTED`, or `FAILED`).
 
-### Convención de Formato para Memorias Extendidas
+### Extended Memory Format Convention
 
-Cuando uses `mem_save` para registrar una decisión, patrón complejo o diseño de arquitectura, DEBES estructurar el parámetro `content` en formato Markdown usando la siguiente taxonomía (basada en el OpenCode Gentleman Agent):
+When using `mem_save` to record a decision, complex pattern, or architecture design, you MUST structure the `content` parameter in Markdown format using the following taxonomy (based on the OpenCode Gentleman Agent):
 
-**What**: [Resumen muy abreviado de la memoria, decisión o código]
-**Why**: [El por qué de esta arquitectura/estado. Los problemas que resuelve y metas.]
-**Where**: [Dónde vive (rutas de código, archivos, servicios alterados)]
+**What**: [Very brief summary of the memory, decision, or code]
+**Why**: [The why of this architecture/state. The problems it solves and goals.]
+**Where**: [Where it lives (code paths, files, altered services)]
 **Key Details**:
 
-- [Punto detallado importante 1...]
-- [Punto detallado importante 2...]
-  **Learned**: [Lecciones clave aprendidas para recordar a futuro]
+- [Important detailed point 1...]
+- [Important detailed point 2...]
+  **Learned**: [Key lessons learned to remember for the future]
 
-- Usa siempre un **`type` válido**: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, o `DOCUMENTATION`.
-- Usa el argumento **`tags`** con palabras clave separadas por comas (ej. "frontend,react,auth") para mejorar la búsqueda.
-- Utiliza siempre **`projectName`** apuntando al repositorio o dominio que corresponde ("cpancode", "lu-memory", "app-frontend", etc.).
-- Incluye el **`sessionId`** actual y el **`topicKey`** correspondiente para mantener la trazabilidad.
-- Si el usuario lo pide explícitamente, puedes pasar "manual-save" en el parámetro _source_ o _sessionId_.
-- Especifica el **`scope`** ("project" o "personal") según corresponda.
+- Always use a **valid `type`**: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, or `DOCUMENTATION`.
+- Use the **`tags`** argument with comma-separated keywords (e.g., "frontend,react,auth") to improve search.
+- Always use **`projectName`** pointing to the corresponding repository or domain ("cpancode", "lu-memory", "app-frontend", etc.).
+- Include the current **`sessionId`** and corresponding **`topicKey`** to maintain traceability.
+- If the user explicitly requests it, you can pass "manual-save" in the _source_ or _sessionId_ parameter.
+- Specify the **`scope`** ("project" or "personal") as appropriate.
 
 ---
 
@@ -50,98 +71,107 @@ Cuando uses `mem_save` para registrar una decisión, patrón complejo o diseño 
 
 ### 1. Start / Resume Work
 
-- Al principio de la sesión:
-  - `mem_session_start` (si comienza un bloque nuevo de trabajo).
-  - `mem_context` para recuperar estado reciente y temas activos.
-- Si necesitas contexto sobre un tema específico:
-  1. `mem_search` (o `mem_search_advanced` si necesitas filtros o mejor ranking)  
-     → para encontrar recuerdos relevantes.
-  2. `mem_timeline`  
-     → para ver la evolución cronológica alrededor de un recuerdo.
-  3. `mem_get_observation`  
-     → para leer en detalle una memoria concreta.
+- At the beginning of the session:
+  - `mem_session_start` (if starting a new work block).
+  - `mem_context` to recover recent state and active topics.
+- If you need context about a specific topic:
+  1. `mem_search` (or `mem_search_advanced` if you need filters or better ranking)
+     → to find relevant memories.
+  2. `mem_timeline`
+     → to see the chronological evolution around a memory.
+  3. `mem_get_observation`
+     → to read a specific memory in detail.
 
 ### 2. During Work
 
-- Usa `mem_save` para registrar:
-  - Bugs y su causa raíz.
-  - Decisiones de arquitectura/diseño y alternativas descartadas.
-  - Cambios relevantes de configuración o infraestructura.
-  - Optimizaciones de rendimiento (qué, por qué, mediciones).
-  - Decisiones de refactorización (ámbito, riesgos, estado).
-  - Resúmenes intermedios de avances importantes.
-- Para temas que continuarán en el tiempo:
+- Use `mem_save` to record:
+  - Bugs and their root cause.
+  - Architecture/design decisions and discarded alternatives.
+  - Relevant configuration or infrastructure changes.
+  - Performance optimizations (what, why, measurements).
+  - Refactoring decisions (scope, risks, state).
+  - Intermediate summaries of important progress.
+- For topics that will continue over time:
   1. `mem_suggest_topic_key(type="...", title="...")`.
-  2. `mem_save(..., topic_key="<clave-sugerida>")`.
-  3. Reutiliza esa misma `topic_key` en futuras actualizaciones.
-- Si la instrucción o el prompt del usuario será útil como plantilla futura (Tabla `saved_prompts`):
-  - Usa `mem_save_prompt` para guardarlo como referencia reutilizable.
-  - **Obligatorio:** Especifica el `intent` (ej. "scaffolding", "refactor", "bugfix") y el `source` (ej. "user-prompt", "agent-template"), además de enlazalo al `topic_key` y `session_id` actuales.
+  2. `mem_save(..., topic_key="<suggested-key>")`.
+  3. Reuse that same `topic_key` in future updates.
+- If the user's instruction or prompt will be useful as a future template (`saved_prompts` table):
+  - Use `mem_save_prompt` to save it as a reusable reference.
+  - **Mandatory:** Specify the `intent` (e.g., "scaffolding", "refactor", "bugfix") and `source` (e.g., "user-prompt", "agent-template"), and link it to the current `topic_key` and `session_id`.
 
 ### 3. Update / Clean Up
 
-- Usa `mem_update` cuando:
-  - Una decisión cambie.
-  - Tengas nueva información que refiné una memoria previa.
-- Usa `mem_delete` solo cuando:
-  - Una memoria sea claramente irrelevante, errónea o sensible.
-  - Por defecto es soft-delete (se puede recuperar internamente).
+- Use `mem_update` when:
+  - A decision changes.
+  - You have new information that refines a previous memory.
+- Use `mem_delete` only when:
+  - A memory is clearly irrelevant, erroneous, or sensitive.
+  - By default it's soft-delete (can be recovered internally).
 
 ### 4. End of Session
 
-- Al cerrar una sesión de trabajo:
-  - `mem_session_summary` para registrar:
-    - Qué se hizo.
-    - Decisiones tomadas.
-    - Pendientes para la próxima sesión.
-  - `mem_session_end` para marcar el cierre.
+- When closing a work session:
+  - `mem_session_summary` to record:
+    - What was done.
+    - Decisions made.
+    - Pending items for the next session.
+  - `mem_session_end` to mark the closure.
 
-### Formato para el Cierre de Sesión (Session Summary)
+### Session Summary Format
 
-Al terminar el trabajo y llamar a `mem_session_summary`, NUNCA envíes resúmenes cortos de una línea. El parámetro `summary` DEBE seguir este formato Markdown estandarizado para mantener la consistencia histórica del proyecto:
+When finishing work and calling `mem_session_summary`, NEVER send short one-line summaries. The `summary` parameter MUST follow this standardized Markdown format to maintain the project's historical consistency:
 
-**What**: [Resumen de lo que se implementó o solucionó durante toda la sesión]
-**Why**: [El contexto o impacto de por qué se requirió el trabajo]
-**Where**: [Los archivos principales modificados o herramientas utilizadas]
+**What**: [Summary of what was implemented or solved during the entire session]
+**Why**: [The context or impact of why the work was required]
+**Where**: [The main files modified or tools used]
 **Key Details**:
 
-- [Detalle técnico 1...]
-- [Detalle técnico 2...]
+- [Technical detail 1...]
+- [Technical detail 2...]
 
-📌 Y en el parámetro **lessonsLearned**, coloca cualquier descubrimiento técnico importante que pueda servir en futuras sesiones.
+📌 And in the **lessonsLearned** parameter, place any important technical discoveries that may be useful in future sessions.
 
 ---
 
 ## Tool Reference (lu-memory)
 
-Usa esta tabla solo como referencia; no es necesario listar todas las herramientas durante la conversación.
-| Tool | Uso principal (cuándo usarla) |
+Use this table only as a reference; it's not necessary to list all tools during the conversation.
+| Tool | Primary use (when to use it) |
 |-------------------------|-------------------------------------------------------------------------------|
-| `mem_session_start` | Inicio de un bloque de trabajo o sesión lógica. |
-| `mem_session_end` | Fin de la sesión; marca su cierre. |
-| `mem_session_summary` | Al final: resumen de lo hecho y próximos pasos. |
-| `mem_context` | Al inicio / tras reset: recuperar estado y temas recientes. |
-| `mem_save` | Guardar observaciones importantes, decisiones, aprendizajes. |
-| `mem_save_prompt` | Guardar prompts/instrucciones útiles como plantillas reutilizables. |
-| `mem_search` | Búsqueda de contexto relevante por texto o tema. |
-| `mem_search_advanced` | Búsqueda con mejor ranking, filtros, o cuando `mem_search` no sea suficiente.|
-| `mem_timeline` | Ver evolución cronológica alrededor de recuerdos clave. |
-| `mem_get_observation` | Leer el detalle completo de una memoria específica. |
-| `mem_suggest_topic_key` | Obtener una `topic_key` estable para temas de largo plazo. |
-| `mem_update` | Corregir o mejorar una memoria existente. |
-| `mem_delete` | Borrar (normalmente soft-delete) una memoria obsoleta o errónea. |
-| `mem_stats` | Ver estado global del sistema de memoria (para diagnóstico / introspección).|
+| `mem_session_start` | Start of a work block or logical session. |
+| `mem_session_end` | End of session; marks its closure. |
+| `mem_session_summary` | At the end: summary of what was done and next steps. |
+| `mem_context` | At start / after reset: recover recent state and topics. |
+| `mem_save` | Save important observations, decisions, learnings. |
+| `mem_save_prompt` | Save useful prompts/instructions as reusable templates. |
+| `mem_search` | Search for relevant context by text or topic. |
+| `mem_search_advanced` | Search with better ranking, filters, or when `mem_search` isn't enough. |
+| `mem_timeline` | View chronological evolution around key memories. |
+| `mem_get_observation` | Read the complete detail of a specific memory. |
+| `mem_suggest_topic_key` | Get a stable `topic_key` for long-term topics. |
+| `mem_update` | Correct or improve an existing memory. |
+| `mem_delete` | Delete (normally soft-delete) an obsolete or erroneous memory. |
+| `mem_stats` | View global state of the memory system (for diagnosis / introspection). |
 
 ---
 
 ## Behavioral Summary
 
-- **Siempre**:
-  - Llama a `mem_context` al inicio y tras resets.
-  - Piensa si lo que acabas de lograr/decidir merece un `mem_save`.
-- **Para temas que continúan en el tiempo**:
-  - Usa `mem_suggest_topic_key` y reutiliza la misma `topic_key`.
-- **Para navegar memoria existente**:
-  - Aplica el patrón: `mem_search` → `mem_timeline` → `mem_get_observation`.
-- **Para cerrar bien una sesión**:
-  - `mem_session_summary` → `mem_session_end`.
+- **🚨 MANDATORY at the START of EVERY conversation**:
+  1. `mem_context` - Recover previous work state
+  2. `mem_session_start` - Open new session in `memory_sessions`
+
+- **🚨 MANDATORY at the END of EVERY conversation**:
+  1. `mem_session_summary` - Save detailed summary with What/Why/Where format
+  2. `mem_session_end` - Close session with appropriate status (COMPLETED/ABORTED/FAILED)
+
+- **During work**:
+  - Think about whether what you just achieved/decided deserves a `mem_save`.
+  - Use `mem_save` proactively without waiting for the user to ask.
+
+- **For topics that continue over time**:
+  - Use `mem_suggest_topic_key` and reuse the same `topic_key`.
+
+- **To navigate existing memory**:
+  - Apply the pattern: `mem_search` → `mem_timeline` → `mem_get_observation`.
+  - Leverage FTS5 search to find memories with partial or fuzzy text.

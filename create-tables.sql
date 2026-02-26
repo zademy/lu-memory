@@ -1,6 +1,6 @@
--- Script para crear las tablas de lu-memory en SQLite
+-- Script to create lu-memory tables in SQLite
 
--- 1. Tabla observations
+-- 1. Table observations
 CREATE TABLE IF NOT EXISTS observations (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS observations (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Tabla memory_sessions
+-- 2. Table memory_sessions
 CREATE TABLE IF NOT EXISTS memory_sessions (
     id TEXT PRIMARY KEY,
     agent_name TEXT,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS memory_sessions (
     ended_at TIMESTAMP
 );
 
--- 3. Tabla saved_prompts
+-- 3. Table saved_prompts
 CREATE TABLE IF NOT EXISTS saved_prompts (
     id TEXT PRIMARY KEY,
     session_id TEXT,
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS saved_prompts (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Tabla virtual FTS5 para búsqueda full-text
+-- 4. Virtual table FTS5 for full-text search
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
     type,
     topic_key,
@@ -57,22 +57,22 @@ CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
     content_rowid='rowid'
 );
 
--- 5. Triggers para sincronizar FTS
+-- 5. Triggers to synchronize FTS
 
--- Trigger para INSERT
+-- Trigger for INSERT
 CREATE TRIGGER IF NOT EXISTS observations_ai AFTER INSERT ON observations
 BEGIN
     INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source)
     VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source);
 END;
 
--- Trigger para DELETE
+-- Trigger for DELETE
 CREATE TRIGGER IF NOT EXISTS observations_ad AFTER DELETE ON observations
 BEGIN
     DELETE FROM observations_fts WHERE rowid = OLD.rowid;
 END;
 
--- Trigger para UPDATE
+-- Trigger for UPDATE
 CREATE TRIGGER IF NOT EXISTS observations_au AFTER UPDATE ON observations
 BEGIN
     DELETE FROM observations_fts WHERE rowid = OLD.rowid;

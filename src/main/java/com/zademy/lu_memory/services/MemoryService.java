@@ -70,7 +70,7 @@ public class MemoryService {
             if (session.getSummary() == null || session.getSummary().isBlank()) {
                 session.setSummary(normSummary);
             } else if (!session.getSummary().contains(normSummary)) {
-                // Anexa el nuevo texto en lugar de destruir el resumen previo.
+                // Append the new text instead of destroying the previous summary.
                 session.setSummary(session.getSummary() + "\n\n--- End Note ---\n" + normSummary);
             }
         }
@@ -94,7 +94,7 @@ public class MemoryService {
             throw new IllegalArgumentException("content is required");
         }
 
-        // Sanitizar contenido (redactar <private>...</private>)
+        // Sanitize content (redact <private>...</private>)
         String sanitizedContent = content.replaceAll("(?s)<private>.*?</private>", "[REDACTED]");
         String actualScope = normalize(scope) == null ? "project" : scope.trim().toLowerCase(Locale.ROOT);
         String actualTopicKey = resolveTopicKey(topicKey, title, sanitizedContent);
@@ -221,7 +221,7 @@ public class MemoryService {
             base = "general-memory";
         }
 
-        // Heurística por familia
+        // Heuristic by family
         String combined = ((topicHint != null ? topicHint : "") + " " + (contentHint != null ? contentHint : ""))
                 .toLowerCase(Locale.ROOT);
         if (!base.contains("/")) {
@@ -257,7 +257,7 @@ public class MemoryService {
         }
 
         try {
-            // Usar FTS5 de SQLite para búsqueda de texto completo
+            // Use SQLite FTS5 for full-text search
             String sql = """
                     SELECT o.id,
                            o.type,
@@ -288,8 +288,8 @@ public class MemoryService {
                 return row;
             }, query, limit);
         } catch (Exception e) {
-            LOGGER.error("Error en búsqueda FTS5: " + e.getMessage(), e);
-            // Fallback a búsqueda simple sin FTS
+            LOGGER.error("FTS5 search error: " + e.getMessage(), e);
+            // Fallback to simple search without FTS
             return fallbackSearch(query, limit, includeDeleted);
         }
     }
@@ -325,7 +325,7 @@ public class MemoryService {
             return List.of();
         }
 
-        // Búsqueda avanzada con FTS5 usando diferentes operadores
+        // Advanced search with FTS5 using different operators
         String ftsQuery = enhanceFtsQuery(query);
 
         String sql = """
@@ -364,10 +364,10 @@ public class MemoryService {
     }
 
     private String enhanceFtsQuery(String query) {
-        // Mejorar la consulta FTS con operadores avanzados
+        // Enhance FTS query with advanced operators
         String enhanced = query.trim();
 
-        // Si no contiene operadores FTS, agregar búsqueda por prefijo
+        // If it does not contain FTS operators, add prefix search
         if (!enhanced.contains("AND") && !enhanced.contains("OR") && !enhanced.contains("NOT")
                 && !enhanced.contains("\"")) {
             String[] words = enhanced.split("\\s+");

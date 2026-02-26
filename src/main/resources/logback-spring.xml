@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Deshabilitar completamente la salida a consola para MCP stdio -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>OFF</level>
+        </filter>
+    </appender>
+
+    <!-- Appender para archivo de log -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE:-logs/mcp-lu-memory-stdio-server.log}</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] %c{1} - %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_FILE:-logs/mcp-lu-memory-stdio-server.log}.%d{yyyy-MM-dd}.gz</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Logger para tu aplicación -->
+    <logger name="com.zademy.lu_memory" level="INFO"/>
+    
+    <!-- Loggers para Spring y Hibernate - solo errores -->
+    <logger name="org.springframework" level="ERROR"/>
+    <logger name="org.hibernate" level="ERROR"/>
+    
+    <!-- Root logger - solo errores críticos -->
+    <root level="ERROR">
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

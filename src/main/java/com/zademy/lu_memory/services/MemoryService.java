@@ -3,6 +3,9 @@ package com.zademy.lu_memory.services;
 import com.zademy.lu_memory.entitys.ObservationEntity;
 import com.zademy.lu_memory.entitys.PromptEntity;
 import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.models.ObservationRecord;
+import com.zademy.lu_memory.models.PromptRecord;
+import com.zademy.lu_memory.models.SessionRecord;
 import com.zademy.lu_memory.models.ObservationType;
 import com.zademy.lu_memory.repositorys.ObservationRepository;
 import com.zademy.lu_memory.repositorys.PromptRepository;
@@ -27,10 +30,21 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Core service for handling memory operations such as sessions, observations,
- * and prompts.
- * Acts as the centralized domain logic orchestrator for the Model Context
- * Protocol (MCP) server.
+ * <b>Core Domain Service</b> for managing the lifecycle of sessions,
+ * observations, and prompts.
+ * <p>
+ * This service acts as an <b>Orchestrator</b> (Application Service layer) that
+ * encapsulates
+ * business logic for memory retention, de-duplication, and search.
+ * It follows <b>SOLID</b> principles:
+ * <ul>
+ * <li><b>Single Responsibility (SRP):</b> Manages domain logic while delegating
+ * persistence to Repositories.</li>
+ * <li><b>Open/Closed (OCP):</b> Search capabilities are extensible via FTS5 and
+ * fallback mechanisms.</li>
+ * <li><b>Dependency Inversion (DIP):</b> Depends on Repository abstractions
+ * rather than concrete implementations.</li>
+ * </ul>
  */
 @Service
 public class MemoryService {
@@ -42,6 +56,16 @@ public class MemoryService {
     private final SessionRepository sessionRepository;
     private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * Constructs the MemoryService with required repositories and JDBC template.
+     * Follows the <b>Dependency Inversion Principle (DIP)</b> by injecting
+     * abstractions.
+     *
+     * @param observationRepository Repository for observation persistence.
+     * @param promptRepository      Repository for prompt templates persistence.
+     * @param sessionRepository     Repository for session tracking.
+     * @param jdbcTemplate          JDBC Template for advanced FTS5 queries.
+     */
     public MemoryService(
             ObservationRepository observationRepository,
             PromptRepository promptRepository,
@@ -61,12 +85,12 @@ public class MemoryService {
      * @return The newly created {@link SessionEntity}.
      */
     @Transactional
-    public SessionEntity startSession(String agentName, String branchName) {
+    public SessionRecord startSession(String agentName, String branchName) {
         SessionEntity session = new SessionEntity();
         session.setAgentName(normalize(agentName));
         session.setBranchName(normalize(branchName));
         session.setStatus("STARTED");
-        return sessionRepository.save(session);
+        return toSessionRecord(sessionRepository.save(session));
     }
 
     /**
@@ -79,7 +103,7 @@ public class MemoryService {
      * @return The updated {@link SessionEntity}.
      */
     @Transactional
-    public SessionEntity endSession(UUID sessionId, String status, String summary) {
+    public SessionRecord endSession(UUID sessionId, String status, String summary) {
         SessionEntity session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
@@ -96,7 +120,7 @@ public class MemoryService {
         }
 
         session.setEndedAt(Instant.now());
-        return sessionRepository.save(session);
+        return toSessionRecord(sessionRepository.save(session));
     }
 
     /**
@@ -118,7 +142,7 @@ public class MemoryService {
      * @return The saved or updated {@link ObservationEntity}.
      */
     @Transactional
-    public ObservationEntity saveObservation(
+    public ObservationRecord saveObservation(
             String type,
             String topicKey,
             String title,
@@ -139,15 +163,20 @@ public class MemoryService {
         String projectKey = "default";
         String contentHash = computeHash(sanitizedContent);
 
+        // Check for existing observations to handle de-duplication or revisions
         Optional<ObservationEntity> existingOpt = observationRepository
                 .findByScopeAndProjectKeyAndTopicKeyAndDeletedFalse(actualScope, projectKey, actualTopicKey);
 
         if (existingOpt.isPresent()) {
             ObservationEntity existing = existingOpt.get();
             existing.setLastSeenAt(Instant.now());
+
+            // If content matches exactly, increment duplicate count (De-duplication
+            // pattern)
             if (contentHash.equals(existing.getContentHash())) {
                 existing.setDuplicateCount(existing.getDuplicateCount() + 1);
             } else {
+                // If content changed, update it and increment revision count (Version tracking)
                 existing.setContent(sanitizedContent.trim());
                 if (normalize(title) != null) {
                     existing.setTitle(normalize(title));
@@ -158,9 +187,10 @@ public class MemoryService {
                 existing.setRevisionCount(existing.getRevisionCount() + 1);
                 existing.setContentHash(contentHash);
             }
-            return observationRepository.save(existing);
+            return toObservationRecord(observationRepository.save(existing));
         }
 
+        // New observation creation
         ObservationEntity observation = new ObservationEntity();
         observation.setType(ObservationType.fromString(type).name());
         observation.setTopicKey(actualTopicKey);
@@ -177,9 +207,16 @@ public class MemoryService {
         observation.setDuplicateCount(0);
         observation.setRevisionCount(1);
         observation.setLastSeenAt(Instant.now());
-        return observationRepository.save(observation);
+        return toObservationRecord(observationRepository.save(observation));
     }
 
+    /**
+     * Computes a SHA-256 hash of the given input string.
+     * Used for content de-duplication and version tracking.
+     *
+     * @param input The raw string content.
+     * @return A hexadecimal representation of the SHA-256 hash.
+     */
     private String computeHash(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -198,8 +235,22 @@ public class MemoryService {
         }
     }
 
+    /**
+     * Updates an existing observation with new data.
+     * Increments revision count if content significantly changes.
+     *
+     * @param observationId The unique identifier of the observation.
+     * @param type          The new type classification (optional).
+     * @param topicKey      The new topic key (optional).
+     * @param title         The new title (optional).
+     * @param content       The new content payload (optional).
+     * @param tags          The new tags metadata (optional).
+     * @param projectName   The new project name (optional).
+     * @return The updated {@link ObservationRecord}.
+     * @throws IllegalArgumentException if the observation is not found.
+     */
     @Transactional
-    public ObservationEntity updateObservation(
+    public ObservationRecord updateObservation(
             UUID observationId,
             String type,
             String topicKey,
@@ -229,9 +280,18 @@ public class MemoryService {
             observation.setProjectName(projectName.trim());
         }
 
-        return observationRepository.save(observation);
+        return toObservationRecord(observationRepository.save(observation));
     }
 
+    /**
+     * Removes an observation from the system.
+     * Supports both soft-delete (flagging) and hard-delete (physical removal).
+     *
+     * @param observationId The unique identifier of the observation.
+     * @param hardDelete    True for physical removal, false for soft-delete.
+     * @return A map containing the ID and the operation status.
+     * @throws IllegalArgumentException if the observation is not found.
+     */
     @Transactional
     public Map<String, Object> deleteObservation(UUID observationId, boolean hardDelete) {
         ObservationEntity observation = observationRepository.findById(observationId)
@@ -252,6 +312,15 @@ public class MemoryService {
                 "status", "SOFT_DELETED");
     }
 
+    /**
+     * Suggests a stable and SEO-friendly topic key based on hints.
+     * Applies a semantic heuristic to categorize keys into namespaces (bug,
+     * architecture, etc.).
+     *
+     * @param topicHint   Initial hint for the topic name.
+     * @param contentHint Secondary hint derived from content.
+     * @return A unique slugified topic key.
+     */
     @Transactional(readOnly = true)
     public String suggestTopicKey(String topicHint, String contentHint) {
         String base = slugify(normalize(topicHint) != null ? topicHint : contentHint);
@@ -288,6 +357,15 @@ public class MemoryService {
         return base + "-" + suffix;
     }
 
+    /**
+     * Searches for memories using SQLite FTS5 full-text search capabilities.
+     * Provides high-performance ranked retrieval based on relevance (BM25).
+     *
+     * @param query          The search string or FTS query.
+     * @param limit          Maximum number of results to return.
+     * @param includeDeleted Whether to search within soft-deleted observations.
+     * @return A list of matching memory records with relevance scores.
+     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> searchMemories(String query, int limit, boolean includeDeleted) {
         if (query == null || query.isBlank()) {
@@ -332,6 +410,15 @@ public class MemoryService {
         }
     }
 
+    /**
+     * Fallback search mechanism using SQL LIKE operators when FTS5 is unavailable
+     * or fails.
+     *
+     * @param query          The search term.
+     * @param limit          Maximum results to return.
+     * @param includeDeleted Whether to include soft-deleted records.
+     * @return A list of matching memory records.
+     */
     private List<Map<String, Object>> fallbackSearch(String query, int limit, boolean includeDeleted) {
         String sql = """
                 SELECT id, type, topic_key, title, content, created_at, deleted
@@ -357,6 +444,16 @@ public class MemoryService {
         }, searchTerm, searchTerm, searchTerm, searchTerm, limit);
     }
 
+    /**
+     * performs an advanced full-text search with highlighting and query
+     * enhancement.
+     * Uses enhanced query syntax to improve recall.
+     *
+     * @param query          The natural language query.
+     * @param limit          Maximum results.
+     * @param includeDeleted Include soft-deleted records.
+     * @return Memory records with highlighted snippets.
+     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> searchMemoriesAdvanced(String query, int limit, boolean includeDeleted) {
         if (query == null || query.isBlank()) {
@@ -401,6 +498,13 @@ public class MemoryService {
         }, ftsQuery, limit);
     }
 
+    /**
+     * Enhances a plain query with FTS5 boolean operators for better search
+     * performance.
+     *
+     * @param query The raw query string.
+     * @return An optimized FTS5 query.
+     */
     private String enhanceFtsQuery(String query) {
         // Enhance FTS query with advanced operators
         String enhanced = query.trim();
@@ -415,8 +519,17 @@ public class MemoryService {
         return enhanced;
     }
 
+    /**
+     * Saves a high-level summary of the current session as a permanent observation.
+     * Integrates lessons learned for future architectural reference.
+     *
+     * @param sessionId      The active session UUID.
+     * @param summary        Narrative summary of progress.
+     * @param lessonsLearned Key takeaways or technical discoveries.
+     * @return The created {@link ObservationRecord}.
+     */
     @Transactional
-    public ObservationEntity saveSessionSummary(UUID sessionId, String summary, String lessonsLearned) {
+    public ObservationRecord saveSessionSummary(UUID sessionId, String summary, String lessonsLearned) {
         SessionEntity session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
 
@@ -442,6 +555,15 @@ public class MemoryService {
                 "default");
     }
 
+    /**
+     * Retrieves the comprehensive context for a specific topic or recent activity.
+     * Consolidates observations, recent sessions, and prompt templates.
+     *
+     * @param topicKey       The group key to filter by (optional).
+     * @param limit          Maximum number of items per category.
+     * @param includePrompts Whether to include associated prompt templates.
+     * @return A unified context map.
+     */
     @Transactional(readOnly = true)
     public Map<String, Object> getContext(String topicKey, int limit, boolean includePrompts) {
         int cappedLimit = Math.max(1, Math.min(limit, 100));
@@ -485,6 +607,15 @@ public class MemoryService {
         return response;
     }
 
+    /**
+     * Generates a chronological timeline around a specific observation point.
+     * Useful for understanding the sequence of events or debugging.
+     *
+     * @param observationId The anchor observation ID.
+     * @param windowMinutes Time range in minutes (before and after) to include.
+     * @param limit         Maximum records to return.
+     * @return A timeline representation including the center point.
+     */
     @Transactional(readOnly = true)
     public Map<String, Object> timeline(UUID observationId, int windowMinutes, int limit) {
         ObservationEntity center = observationRepository.findByIdAndDeletedFalse(observationId)
@@ -504,6 +635,12 @@ public class MemoryService {
                 "to", to);
     }
 
+    /**
+     * Fetches detailed information for a single observation.
+     *
+     * @param observationId The unique ID.
+     * @return Data map of the observation.
+     */
     @Transactional(readOnly = true)
     public Map<String, Object> getObservation(UUID observationId) {
         ObservationEntity observation = observationRepository.findById(observationId)
@@ -511,8 +648,20 @@ public class MemoryService {
         return toObservationRow(observation);
     }
 
+    /**
+     * Saves a reusable prompt template for future agent context.
+     * Follows the <b>Strategy Pattern</b> by allowing categorized intent and
+     * source.
+     *
+     * @param sessionId The current session ID.
+     * @param prompt    The template text.
+     * @param topicKey  Logical grouping key.
+     * @param intent    The purpose of the prompt (e.g., "refactor", "debug").
+     * @param source    Origin of the template.
+     * @return The saved {@link PromptRecord}.
+     */
     @Transactional
-    public PromptEntity savePrompt(String sessionId, String prompt, String topicKey, String intent, String source) {
+    public PromptRecord savePrompt(String sessionId, String prompt, String topicKey, String intent, String source) {
         if (prompt == null || prompt.isBlank()) {
             throw new IllegalArgumentException("prompt is required");
         }
@@ -523,9 +672,15 @@ public class MemoryService {
         promptEntity.setIntent(normalize(intent));
         promptEntity.setSource(normalize(source));
         promptEntity.setPrompt(prompt.trim());
-        return promptRepository.save(promptEntity);
+        return toPromptRecord(promptRepository.save(promptEntity));
     }
 
+    /**
+     * Aggregates global statistics for the memory system.
+     * Includes counts, de-duplication metrics, and top active topics.
+     *
+     * @return A map of diagnostic metrics.
+     */
     @Transactional(readOnly = true)
     public Map<String, Object> stats() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -562,11 +717,21 @@ public class MemoryService {
         return response;
     }
 
+    /**
+     * Retrieves a specific session record by its UUID.
+     *
+     * @param sessionId The session identifier.
+     * @return An Optional containing the {@link SessionRecord} if found.
+     */
     @Transactional(readOnly = true)
-    public Optional<SessionEntity> getSession(UUID sessionId) {
-        return sessionRepository.findById(sessionId);
+    public Optional<SessionRecord> getSession(UUID sessionId) {
+        return sessionRepository.findById(sessionId).map(this::toSessionRecord);
     }
 
+    /**
+     * Resolves the final topic key, prioritizing user input or generating one from
+     * content.
+     */
     private String resolveTopicKey(String provided, String title, String content) {
         if (normalize(provided) != null) {
             return slugify(provided);
@@ -576,6 +741,10 @@ public class MemoryService {
         return suggestTopicKey(source, source);
     }
 
+    /**
+     * Transforms raw strings into URL-safe, lowercase slugs for consistent topic
+     * tracking.
+     */
     private String slugify(String raw) {
         if (raw == null) {
             return "";
@@ -593,6 +762,9 @@ public class MemoryService {
         return slug;
     }
 
+    /**
+     * Trims strings and returns null if empty, ensuring clean data persistence.
+     */
     private String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -600,6 +772,9 @@ public class MemoryService {
         return value.trim();
     }
 
+    /**
+     * Creates a short preview of the content for list views.
+     */
     private String toSnippet(String content) {
         if (content == null) {
             return "";
@@ -612,6 +787,9 @@ public class MemoryService {
         return content.substring(0, 220) + "...";
     }
 
+    /**
+     * Mapping helper to convert JPA Entity to an API-friendly Map representation.
+     */
     private Map<String, Object> toObservationRow(ObservationEntity observation) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", observation.getId());
@@ -628,5 +806,36 @@ public class MemoryService {
         row.put("deleted", observation.isDeleted());
         row.put("deletedAt", observation.getDeletedAt());
         return row;
+    }
+
+    private SessionRecord toSessionRecord(com.zademy.lu_memory.entitys.SessionEntity entity) {
+        if (entity == null)
+            return null;
+        return new SessionRecord(
+                entity.getId(), entity.getAgentName(), entity.getBranchName(),
+                entity.getSummary(), entity.getStatus(), entity.getStartedAt(),
+                entity.getEndedAt());
+    }
+
+    private ObservationRecord toObservationRecord(com.zademy.lu_memory.entitys.ObservationEntity entity) {
+        if (entity == null)
+            return null;
+        return new ObservationRecord(
+                entity.getId(), entity.getType(), entity.getTopicKey(),
+                entity.getTitle(), entity.getContent(), entity.getTagsText(),
+                entity.getSource(), entity.getSessionId(), entity.getScope(),
+                entity.getProjectKey(), entity.getProjectName(), entity.getContentHash(),
+                entity.getDuplicateCount(), entity.getRevisionCount(), entity.getLastSeenAt(),
+                entity.isDeleted(), entity.getDeletedAt(), entity.getCreatedAt(),
+                entity.getUpdatedAt());
+    }
+
+    private PromptRecord toPromptRecord(com.zademy.lu_memory.entitys.PromptEntity entity) {
+        if (entity == null)
+            return null;
+        return new PromptRecord(
+                entity.getId(), entity.getSessionId(), entity.getTopicKey(),
+                entity.getIntent(), entity.getSource(), entity.getPrompt(),
+                entity.getCreatedAt());
     }
 }

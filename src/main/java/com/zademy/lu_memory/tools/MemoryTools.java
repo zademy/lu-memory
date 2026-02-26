@@ -1,8 +1,8 @@
 package com.zademy.lu_memory.tools;
 
-import com.zademy.lu_memory.entitys.ObservationEntity;
-import com.zademy.lu_memory.entitys.PromptEntity;
-import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.models.ObservationRecord;
+import com.zademy.lu_memory.models.PromptRecord;
+import com.zademy.lu_memory.models.SessionRecord;
 import com.zademy.lu_memory.services.MemoryService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -30,11 +30,11 @@ public class MemoryTools {
         public Map<String, Object> memSessionStart(
                         @ToolParam(description = "Agent name") String agentName,
                         @ToolParam(description = "Branch name") String branchName) {
-                SessionEntity session = memoryService.startSession(agentName, branchName);
+                SessionRecord session = memoryService.startSession(agentName, branchName);
                 return Map.of(
-                                "sessionId", session.getId(),
-                                "status", session.getStatus(),
-                                "startedAt", session.getStartedAt());
+                                "sessionId", session.id(),
+                                "status", session.status(),
+                                "startedAt", session.startedAt());
         }
 
         @Tool(name = "mem_session_end", description = "Mark a session as completed")
@@ -42,11 +42,11 @@ public class MemoryTools {
                         @ToolParam(description = "Session ID") String sessionId,
                         @ToolParam(description = "Session status (COMPLETED, ABORTED, FAILED)") String status,
                         @ToolParam(description = "Session summary") String summary) {
-                SessionEntity session = memoryService.endSession(UUID.fromString(sessionId), status, summary);
+                SessionRecord session = memoryService.endSession(UUID.fromString(sessionId), status, summary);
                 return Map.of(
-                                "sessionId", session.getId(),
-                                "status", session.getStatus(),
-                                "endedAt", session.getEndedAt());
+                                "sessionId", session.id(),
+                                "status", session.status(),
+                                "endedAt", session.endedAt());
         }
 
         @Tool(name = "mem_save", description = "Save a structured observation")
@@ -60,7 +60,7 @@ public class MemoryTools {
                         @ToolParam(description = "Scope: project or personal") String scope,
                         @ToolParam(description = "Source of memory") String source,
                         @ToolParam(description = "Project name") String projectName) {
-                ObservationEntity observation = memoryService.saveObservation(
+                ObservationRecord observation = memoryService.saveObservation(
                                 type,
                                 topicKey,
                                 title,
@@ -72,10 +72,10 @@ public class MemoryTools {
                                 projectName);
 
                 return Map.of(
-                                "id", observation.getId(),
-                                "topicKey", observation.getTopicKey(),
-                                "type", observation.getType(),
-                                "createdAt", observation.getCreatedAt());
+                                "id", observation.id(),
+                                "topicKey", observation.topicKey(),
+                                "type", observation.type(),
+                                "createdAt", observation.createdAt());
         }
 
         @Tool(name = "mem_update", description = "Update an existing observation by ID")
@@ -87,7 +87,7 @@ public class MemoryTools {
                         @ToolParam(description = "Content") String content,
                         @ToolParam(description = "Comma separated tags") String tags,
                         @ToolParam(description = "Project name") String projectName) {
-                ObservationEntity updated = memoryService.updateObservation(
+                ObservationRecord updated = memoryService.updateObservation(
                                 UUID.fromString(observationId),
                                 type,
                                 topicKey,
@@ -97,9 +97,9 @@ public class MemoryTools {
                                 projectName);
 
                 return Map.of(
-                                "id", updated.getId(),
-                                "updatedAt", updated.getUpdatedAt(),
-                                "topicKey", updated.getTopicKey());
+                                "id", updated.id(),
+                                "updatedAt", updated.updatedAt(),
+                                "topicKey", updated.topicKey());
         }
 
         @Tool(name = "mem_delete", description = "Delete an observation; soft-delete by default")
@@ -148,15 +148,15 @@ public class MemoryTools {
                         @ToolParam(description = "Session ID") String sessionId,
                         @ToolParam(description = "Summary") String summary,
                         @ToolParam(description = "Lessons learned") String lessonsLearned) {
-                ObservationEntity observation = memoryService.saveSessionSummary(
+                ObservationRecord observation = memoryService.saveSessionSummary(
                                 UUID.fromString(sessionId),
                                 summary,
                                 lessonsLearned);
 
                 return Map.of(
-                                "observationId", observation.getId(),
+                                "observationId", observation.id(),
                                 "sessionId", sessionId,
-                                "topicKey", observation.getTopicKey());
+                                "topicKey", observation.topicKey());
         }
 
         @Tool(name = "mem_context", description = "Get recent context from previous sessions")
@@ -192,7 +192,7 @@ public class MemoryTools {
                         @ToolParam(description = "Topic key") String topicKey,
                         @ToolParam(description = "Intent") String intent,
                         @ToolParam(description = "Source") String source) {
-                PromptEntity saved = memoryService.savePrompt(
+                PromptRecord saved = memoryService.savePrompt(
                                 sessionId == null || sessionId.isBlank() ? null : sessionId.trim(),
                                 prompt,
                                 topicKey,
@@ -200,9 +200,9 @@ public class MemoryTools {
                                 source);
 
                 return Map.of(
-                                "id", saved.getId(),
-                                "topicKey", saved.getTopicKey(),
-                                "createdAt", saved.getCreatedAt());
+                                "id", saved.id(),
+                                "topicKey", saved.topicKey(),
+                                "createdAt", saved.createdAt());
         }
 
         @Tool(name = "mem_stats", description = "Memory system statistics")

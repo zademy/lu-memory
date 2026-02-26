@@ -12,6 +12,10 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 
+/**
+ * Acts as the entity model for tracking agent interactions grouped by sessions.
+ * Mapped to the "memory_sessions" table within SQLite.
+ */
 @Entity
 @Table(name = "memory_sessions")
 public class SessionEntity {

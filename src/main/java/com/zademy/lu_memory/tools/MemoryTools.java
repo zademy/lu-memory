@@ -11,6 +11,12 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Exposes the MemoryService capabilities as distinct tools.
+ * These tools are annotated for use by Spring AI, enabling LLM models (agents)
+ * to autonomously manage and retrieve their long-term memory via the Model
+ * Context Protocol (MCP).
+ */
 @Service
 public class MemoryTools {
 

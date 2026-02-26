@@ -12,6 +12,11 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 
+/**
+ * Entity representation of reusable prompts or structural commands.
+ * Matches to the "saved_prompts" table used to maintain recurrent instruction
+ * templates.
+ */
 @Entity
 @Table(name = "saved_prompts")
 public class PromptEntity {

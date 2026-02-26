@@ -10,6 +10,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Spring Data JPA repository for semantic access to {@link ObservationEntity}.
+ * Extends CRUD functionality with specific lookup and aggregation queries.
+ */
 public interface ObservationRepository extends JpaRepository<ObservationEntity, UUID> {
 
   Optional<ObservationEntity> findByIdAndDeletedFalse(UUID id);

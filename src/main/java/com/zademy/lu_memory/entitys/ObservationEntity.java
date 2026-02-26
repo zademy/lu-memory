@@ -13,6 +13,12 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 
+/**
+ * Represents the core memory data model mapped to the "observations" SQLite
+ * table.
+ * It stores comprehensive context items, their types, relations, and FTS
+ * indexing metadata.
+ */
 @Entity
 @Table(name = "observations")
 public class ObservationEntity {

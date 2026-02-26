@@ -40,12 +40,19 @@ By acting as a dedicated MCP daemon, `lu-memory` decouples context persistence f
 
 - **Java JDK 25** or higher configured in your environment.
 - **Maven** (optional, as the repository includes `mvnw`).
+- **SQLite 3** installed and available in your environment (either installed via a package manager/installer or downloaded as a standalone zip archive and added to your system `PATH`).
 
 ### Installation & Execution
 
 1. Clone this repository.
 2. Navigate to the project root directory.
-3. Start the application using the Maven wrapper:
+3. **Initialize the SQLite database** by executing the provided schema script (which configures the FTS5 virtual tables):
+
+```bash
+sqlite3 lu-memory.db < create-tables.sql
+```
+
+4. Start the application using the Maven wrapper:
 
 ```bash
 # On Linux / macOS
@@ -55,8 +62,6 @@ By acting as a dedicated MCP daemon, `lu-memory` decouples context persistence f
 mvnw.cmd spring-boot:run
 ```
 
-The embedded SQLite database (`lu-memory.db`) will be created automatically in the root directory and managed via Hibernate/JPA auto-DDL.
-
 ### MCP Client Configuration
 
 To expose `lu-memory` to your AI client (e.g., Claude Desktop, Windsurf, or Cursor), add the server definition to your `mcp_config.json`:
@@ -64,14 +69,17 @@ To expose `lu-memory` to your AI client (e.g., Claude Desktop, Windsurf, or Curs
 ```json
 {
   "lu-memory": {
-    "command": "C:\\Java\\jdk-25.0.2\\bin\\java.exe",
+    "command": "{path_to_jdk}\\bin\\java.exe",
     "args": [
+      "--enable-native-access=ALL-UNNAMED",
       "-Dspring.ai.mcp.server.stdio=true",
       "-Dspring.main.web-application-type=none",
-      "-Dlogging.pattern.console=",
+      "-DLOG_FILE={path_to_project}\\mcp-lu-memory.log",
+      "-DDB_URL=jdbc:sqlite:{path_to_project}\\lu-memory.db",
       "-jar",
-      "C:\\Proyectos\\lu-memory\\target\\lu-memory-0.0.1-SNAPSHOT.jar"
-    ]
+      "{path_to_project}\\target\\lu-memory-0.0.1-SNAPSHOT.jar"
+    ],
+    "disabled": false
   }
 }
 ```

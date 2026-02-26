@@ -9,7 +9,6 @@ import com.zademy.lu_memory.repositorys.PromptRepository;
 import com.zademy.lu_memory.repositorys.SessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,7 +19,6 @@ import java.time.temporal.ChronoUnit;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -28,6 +26,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Core service for handling memory operations such as sessions, observations,
+ * and prompts.
+ * Acts as the centralized domain logic orchestrator for the Model Context
+ * Protocol (MCP) server.
+ */
 @Service
 public class MemoryService {
 
@@ -49,6 +53,13 @@ public class MemoryService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Initializes a new tracking session for an AI agent.
+     *
+     * @param agentName  The name of the agent (e.g., "Windsurf").
+     * @param branchName The specific branch or context string.
+     * @return The newly created {@link SessionEntity}.
+     */
     @Transactional
     public SessionEntity startSession(String agentName, String branchName) {
         SessionEntity session = new SessionEntity();
@@ -58,6 +69,15 @@ public class MemoryService {
         return sessionRepository.save(session);
     }
 
+    /**
+     * Completes and saves an ongoing session, registering the outcome status and a
+     * detailed summary.
+     *
+     * @param sessionId The UUID of the session to end.
+     * @param status    The status to set (e.g., "COMPLETED", "FAILED").
+     * @param summary   The narrative summary of tasks performed during the session.
+     * @return The updated {@link SessionEntity}.
+     */
     @Transactional
     public SessionEntity endSession(UUID sessionId, String status, String summary) {
         SessionEntity session = sessionRepository.findById(sessionId)
@@ -79,6 +99,24 @@ public class MemoryService {
         return sessionRepository.save(session);
     }
 
+    /**
+     * Stores a granular piece of memory (observation) within the persistence layer.
+     * Evaluates whether to create a new entry or update/increment a duplicate.
+     *
+     * @param type        The classification type of the observation (e.g.,
+     *                    DECISION, NOTE).
+     * @param topicKey    The logical grouping key for the memory.
+     * @param title       A brief descriptive title.
+     * @param content     The comprehensive text payload to store (will be redacted
+     *                    if private).
+     * @param tags        Comma-separated values acting as lookup metadata.
+     * @param sessionId   The current active session UUID string associated with
+     *                    this memory.
+     * @param scope       Visibility boundary (e.g., "project" or "personal").
+     * @param source      The mechanism that originated this memory.
+     * @param projectName The domain name for multi-project isolation.
+     * @return The saved or updated {@link ObservationEntity}.
+     */
     @Transactional
     public ObservationEntity saveObservation(
             String type,

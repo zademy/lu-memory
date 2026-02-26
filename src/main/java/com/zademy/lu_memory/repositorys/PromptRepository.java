@@ -8,6 +8,10 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Spring Data JPA repository for persisting and retrieving user-defined
+ * prompts.
+ */
 public interface PromptRepository extends JpaRepository<PromptEntity, UUID> {
 
     @Query("""

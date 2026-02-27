@@ -9,12 +9,12 @@ import org.springframework.stereotype.Service;
 import com.zademy.lu_memory.models.ObservationRecord;
 import com.zademy.lu_memory.models.PromptRecord;
 import com.zademy.lu_memory.models.SessionRecord;
-import com.zademy.lu_memory.services.MemoryService;
+import com.zademy.lu_memory.services.MemoryFacade;
 
 /**
  * Memory management tools for AI agents using the Model Context Protocol (MCP).
  * 
- * This service exposes MemoryService capabilities as distinct Spring AI tools, enabling Large
+ * This service exposes MemoryFacade capabilities as distinct Spring AI tools, enabling Large
  * Language Models (LLMs) and AI agents to autonomously manage their long-term memory. Each tool is
  * annotated with @Tool for automatic discovery and registration with Spring AI.
  * 
@@ -38,24 +38,24 @@ import com.zademy.lu_memory.services.MemoryService;
  * @author LuMemory Team
  * @version 1.0
  * @since 2025
- * @see MemoryService
+ * @see MemoryFacade
  * @see com.zademy.lu_memory.models.ObservationRecord
  * @see com.zademy.lu_memory.models.SessionRecord
  */
 @Service
 public class MemoryTools {
 
-        /** The underlying memory service that handles all database operations */
-        private final MemoryService memoryService;
+        /** The underlying memory facade that exposes cohesive operations */
+        private final MemoryFacade memoryFacade;
 
         /**
-         * Constructs a new MemoryTools instance with the required MemoryService dependency.
+         * Constructs a new MemoryTools instance with the required MemoryFacade dependency.
          * 
-         * @param memoryService The service responsible for all memory storage and retrieval
+         * @param memoryFacade The facade responsible for all memory storage and retrieval
          *        operations
          */
-        public MemoryTools(MemoryService memoryService) {
-                this.memoryService = memoryService;
+        public MemoryTools(MemoryFacade memoryFacade) {
+                this.memoryFacade = memoryFacade;
         }
 
         /**
@@ -73,7 +73,7 @@ public class MemoryTools {
         public Map<String, Object> memSessionStart(
                         @ToolParam(description = "Agent name") String agentName,
                         @ToolParam(description = "Branch name") String branchName) {
-                SessionRecord session = memoryService.startSession(agentName, branchName);
+                SessionRecord session = memoryFacade.startSession(agentName, branchName);
                 return Map.of("sessionId", session.id(), "status", session.status(), "startedAt",
                                 session.startedAt());
         }
@@ -95,7 +95,7 @@ public class MemoryTools {
                         @ToolParam(description = "Session ID") String sessionId,
                         @ToolParam(description = "Session status (COMPLETED, ABORTED, FAILED)") String status,
                         @ToolParam(description = "Session summary") String summary) {
-                SessionRecord session = memoryService.endSession(UUID.fromString(sessionId), status,
+                SessionRecord session = memoryFacade.endSession(UUID.fromString(sessionId), status,
                                 summary);
                 return Map.of("sessionId", session.id(), "status", session.status(), "endedAt",
                                 session.endedAt());
@@ -140,7 +140,7 @@ public class MemoryTools {
                 String processedSessionId =
                                 sessionId == null || sessionId.isBlank() ? null : sessionId.trim();
 
-                ObservationRecord observation = memoryService.saveObservation(type, topicKey, title,
+                ObservationRecord observation = memoryFacade.saveObservation(type, topicKey, title,
                                 content, tags, processedSessionId, scope, source, projectName,
                                 importanceLevel);
 
@@ -177,7 +177,7 @@ public class MemoryTools {
                         @ToolParam(description = "Comma separated tags") String tags,
                         @ToolParam(description = "Project name") String projectName,
                         @ToolParam(description = "Importance level (HIGH, MEDIUM, LOW)") String importanceLevel) {
-                ObservationRecord updated = memoryService.updateObservation(
+                ObservationRecord updated = memoryFacade.updateObservation(
                                 UUID.fromString(observationId), type, topicKey, title, content,
                                 tags, projectName, importanceLevel);
 
@@ -202,7 +202,7 @@ public class MemoryTools {
                         @ToolParam(description = "Use true for hard delete") Boolean hardDelete) {
                 // Default to soft-delete unless explicitly requested for hard-delete
                 boolean deleteHard = hardDelete != null && hardDelete;
-                return memoryService.deleteObservation(UUID.fromString(observationId), deleteHard);
+                return memoryFacade.deleteObservation(UUID.fromString(observationId), deleteHard);
         }
 
         /**
@@ -222,7 +222,7 @@ public class MemoryTools {
         public Map<String, Object> memSuggestTopicKey(
                         @ToolParam(description = "Topic hint") String topicHint,
                         @ToolParam(description = "Additional content hint") String contentHint) {
-                return Map.of("topicKey", memoryService.suggestTopicKey(topicHint, contentHint));
+                return Map.of("topicKey", memoryFacade.suggestTopicKey(topicHint, contentHint));
         }
 
         /**
@@ -249,7 +249,7 @@ public class MemoryTools {
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("query", query);
                 response.put("limit", maxRows);
-                response.put("results", memoryService.searchMemories(query, tags, maxRows, includeDeletedRows));
+                response.put("results", memoryFacade.searchMemories(query, tags, maxRows, includeDeletedRows));
                 return response;
         }
 
@@ -280,7 +280,7 @@ public class MemoryTools {
                 response.put("projectKey", projectKey);
                 response.put("limit", maxRows);
                 response.put("results",
-                                memoryService.searchMemoriesScoped(query, tags, maxRows,
+                                memoryFacade.searchMemoriesScoped(query, tags, maxRows,
                                                 includeDeletedRows, scope, projectKey));
                 return response;
         }
@@ -314,7 +314,7 @@ public class MemoryTools {
                 response.put("query", query);
                 response.put("limit", maxRows);
                 response.put("results",
-                                memoryService.searchMemoriesAdvanced(query, tags, maxRows, includeDeletedRows));
+                                memoryFacade.searchMemoriesAdvanced(query, tags, maxRows, includeDeletedRows));
                 return response;
         }
 
@@ -338,7 +338,7 @@ public class MemoryTools {
                 response.put("projectKey", projectKey);
                 response.put("limit", maxRows);
                 response.put("results",
-                                memoryService.searchMemoriesAdvancedScoped(query, tags, maxRows,
+                                memoryFacade.searchMemoriesAdvancedScoped(query, tags, maxRows,
                                                 includeDeletedRows, scope, projectKey));
                 return response;
         }
@@ -361,7 +361,7 @@ public class MemoryTools {
                         @ToolParam(description = "Session ID") String sessionId,
                         @ToolParam(description = "Summary") String summary,
                         @ToolParam(description = "Lessons learned") String lessonsLearned) {
-                ObservationRecord observation = memoryService.saveSessionSummary(
+                ObservationRecord observation = memoryFacade.saveSessionSummary(
                                 UUID.fromString(sessionId), summary, lessonsLearned);
 
                 return Map.of("observationId", observation.id(), "sessionId", sessionId, "topicKey",
@@ -387,7 +387,7 @@ public class MemoryTools {
                 // Validate and normalize parameters with appropriate defaults
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 100));
                 boolean includePromptRows = includePrompts == null || includePrompts;
-                return memoryService.getContext(topicKey, maxRows, includePromptRows);
+                return memoryFacade.getContext(topicKey, maxRows, includePromptRows);
         }
 
         /**
@@ -409,7 +409,7 @@ public class MemoryTools {
                         @ToolParam(description = "Include saved prompts") Boolean includePrompts) {
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 100));
                 boolean includePromptRows = includePrompts == null || includePrompts;
-                return memoryService.getContextScoped(topicKey, maxRows, includePromptRows, scope,
+                return memoryFacade.getContextScoped(topicKey, maxRows, includePromptRows, scope,
                                 projectKey);
         }
 
@@ -434,7 +434,7 @@ public class MemoryTools {
                 // Set reasonable defaults for timeline parameters
                 int window = windowMinutes == null ? 180 : windowMinutes;
                 int maxRows = limit == null ? 40 : Math.max(1, Math.min(limit, 200));
-                return memoryService.timeline(UUID.fromString(observationId), window, maxRows);
+                return memoryFacade.timeline(UUID.fromString(observationId), window, maxRows);
         }
 
         /**
@@ -450,7 +450,7 @@ public class MemoryTools {
         @Tool(name = "mem_get_observation", description = "Get full content of specific memory")
         public Map<String, Object> memGetObservation(
                         @ToolParam(description = "Observation ID") String observationId) {
-                return memoryService.getObservation(UUID.fromString(observationId));
+                return memoryFacade.getObservation(UUID.fromString(observationId));
         }
 
         /**
@@ -479,7 +479,7 @@ public class MemoryTools {
                 String processedSessionId =
                                 sessionId == null || sessionId.isBlank() ? null : sessionId.trim();
 
-                PromptRecord saved = memoryService.savePrompt(processedSessionId, prompt, topicKey,
+                PromptRecord saved = memoryFacade.savePrompt(processedSessionId, prompt, topicKey,
                                 intent, source);
 
                 return Map.of("id", saved.id(), "topicKey", saved.topicKey(), "createdAt",
@@ -497,6 +497,6 @@ public class MemoryTools {
          */
         @Tool(name = "mem_stats", description = "Memory system statistics")
         public Map<String, Object> memStats() {
-                return memoryService.stats();
+                return memoryFacade.stats();
         }
 }

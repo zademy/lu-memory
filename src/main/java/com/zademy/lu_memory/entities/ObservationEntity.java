@@ -1,4 +1,4 @@
-package com.zademy.lu_memory.entitys;
+package com.zademy.lu_memory.entities;
 
 import com.zademy.lu_memory.constants.AppConstants;
 import jakarta.persistence.Column;

@@ -1,8 +1,8 @@
 package com.zademy.lu_memory.utils;
 
-import com.zademy.lu_memory.entitys.ObservationEntity;
-import com.zademy.lu_memory.entitys.PromptEntity;
-import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.entities.ObservationEntity;
+import com.zademy.lu_memory.entities.PromptEntity;
+import com.zademy.lu_memory.entities.SessionEntity;
 import com.zademy.lu_memory.models.ObservationRecord;
 import com.zademy.lu_memory.models.PromptRecord;
 import com.zademy.lu_memory.models.SessionRecord;

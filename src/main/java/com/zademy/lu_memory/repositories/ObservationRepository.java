@@ -1,6 +1,6 @@
-package com.zademy.lu_memory.repositorys;
+package com.zademy.lu_memory.repositories;
 
-import com.zademy.lu_memory.entitys.ObservationEntity;
+import com.zademy.lu_memory.entities.ObservationEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

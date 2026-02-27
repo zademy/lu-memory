@@ -1,8 +1,8 @@
 package com.zademy.lu_memory.services;
 
-import com.zademy.lu_memory.entitys.ObservationEntity;
-import com.zademy.lu_memory.entitys.PromptEntity;
-import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.entities.ObservationEntity;
+import com.zademy.lu_memory.entities.PromptEntity;
+import com.zademy.lu_memory.entities.SessionEntity;
 import com.zademy.lu_memory.constants.AppConstants;
 import com.zademy.lu_memory.constants.ErrorMessages;
 import com.zademy.lu_memory.constants.ResponseKeys;
@@ -11,11 +11,12 @@ import com.zademy.lu_memory.models.ObservationRecord;
 import com.zademy.lu_memory.models.PromptRecord;
 import com.zademy.lu_memory.models.SessionRecord;
 import com.zademy.lu_memory.models.ObservationType;
-import com.zademy.lu_memory.repositorys.ObservationRepository;
-import com.zademy.lu_memory.repositorys.PromptRepository;
-import com.zademy.lu_memory.repositorys.SessionRepository;
+import com.zademy.lu_memory.repositories.ObservationRepository;
+import com.zademy.lu_memory.repositories.PromptRepository;
+import com.zademy.lu_memory.repositories.SessionRepository;
+import com.zademy.lu_memory.services.search.AdvancedMemorySearchQueryStrategy;
+import com.zademy.lu_memory.services.search.BasicMemorySearchQueryStrategy;
 import com.zademy.lu_memory.utils.EntityMapperUtils;
-import com.zademy.lu_memory.utils.SearchQueryUtils;
 import com.zademy.lu_memory.utils.TextProcessingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +66,8 @@ public class MemoryService {
     private final SessionRepository sessionRepository;
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final BasicMemorySearchQueryStrategy basicSearchQueryStrategy;
+    private final AdvancedMemorySearchQueryStrategy advancedSearchQueryStrategy;
 
     private static final Pattern PRIVATE_BLOCK_PATTERN = Pattern.compile("(?s)<private>.*?</private>");
 
@@ -83,12 +86,16 @@ public class MemoryService {
             PromptRepository promptRepository,
             SessionRepository sessionRepository,
             JdbcTemplate jdbcTemplate,
-            NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+            NamedParameterJdbcTemplate namedParameterJdbcTemplate,
+            BasicMemorySearchQueryStrategy basicSearchQueryStrategy,
+            AdvancedMemorySearchQueryStrategy advancedSearchQueryStrategy) {
         this.observationRepository = observationRepository;
         this.promptRepository = promptRepository;
         this.sessionRepository = sessionRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+        this.basicSearchQueryStrategy = basicSearchQueryStrategy;
+        this.advancedSearchQueryStrategy = advancedSearchQueryStrategy;
     }
 
     /**
@@ -398,7 +405,8 @@ public class MemoryService {
             boolean includeDeleted,
             String scope,
             String projectKey) {
-        if (query == null || query.isBlank()) {
+        String ftsQuery = basicSearchQueryStrategy.buildMatchQuery(query);
+        if (ftsQuery.isBlank()) {
             return List.of();
         }
 
@@ -433,7 +441,7 @@ public class MemoryService {
             }
 
             MapSqlParameterSource parameters = new MapSqlParameterSource();
-            parameters.addValue("query", query);
+            parameters.addValue("query", ftsQuery);
             parameters.addValue("limit", limit);
 
             if (normalizedScope != null) {
@@ -466,7 +474,7 @@ public class MemoryService {
         } catch (Exception e) {
             LOGGER.error("FTS5 search error: " + e.getMessage(), e);
             // Fallback to simple search without FTS
-            return fallbackSearch(query, tags, limit, includeDeleted, normalizedScope, normalizedProjectKey);
+            return fallbackSearch(ftsQuery, tags, limit, includeDeleted, normalizedScope, normalizedProjectKey);
         }
     }
 
@@ -498,12 +506,11 @@ public class MemoryService {
             boolean includeDeleted,
             String scope,
             String projectKey) {
-        if (query == null || query.isBlank()) {
+        String ftsQuery = advancedSearchQueryStrategy.buildMatchQuery(query);
+        if (ftsQuery.isBlank()) {
             return List.of();
         }
 
-        // Advanced search with FTS5 using different operators
-        String ftsQuery = SearchQueryUtils.enhanceFtsQuery(query);
         String normalizedScope = normalizeScopeOrNull(scope);
         String normalizedProjectKey = normalizeProjectKeyOrNull(projectKey);
         List<String> tagFilters = normalizeTagFilters(tags);

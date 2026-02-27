@@ -1,6 +1,6 @@
-package com.zademy.lu_memory.repositorys;
+package com.zademy.lu_memory.repositories;
 
-import com.zademy.lu_memory.entitys.SessionEntity;
+import com.zademy.lu_memory.entities.SessionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

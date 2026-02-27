@@ -45,6 +45,7 @@ graph TD
         Tools["Memory Tools (MCP Endpoints)"]
         Service["Memory Service (Business Logic)"]
         JPA["Spring Data JPA (Data Access)"]
+        DS["SQLite Datasource<br>(single-connection + busy_timeout)"]
     end
 
     subgraph DB["SQLite Database"]
@@ -59,12 +60,23 @@ graph TD
 
     Tools -->|Invokes| Service
     Service -->|Reads / Writes| JPA
+    JPA -->|Uses| DS
     JPA -->|JDBC Persistence| Tables
     JPA -->|High-performance Search| FTS5
 
     Tables -->|Row Insert/Update| Triggers
     Triggers -->|Synchronize Index| FTS5
 ```
+
+### ✅ MCP Smoke Validation (Latest)
+
+After the latest fixes and application restart, a live MCP smoke run from an LLM client validated:
+
+- `mem_stats` and `mem_context` (read path)
+- `mem_search` and `mem_search_advanced` (FTS + tag filtering)
+- `mem_session_start`, `mem_save`, and `mem_session_end` (write/session lifecycle)
+
+This confirms the SQL query assembly issue in search paths and the runtime write-path instability were resolved in the active build.
 
 ## 🛠 Tech Stack
 

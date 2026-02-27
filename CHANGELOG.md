@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session status handling now enforces valid enum values (`STARTED`, `COMPLETED`, `FAILED`, `ABORTED`).
 - Spring bean method name corrected from `weatherTools` to `memoryToolsProvider` for semantic accuracy.
 - Refactored the internal code structure to adhere to **Clean Architecture** and **SOLID** principles, effectively abstracting SQLite persistence details.
+- Updated default SQLite datasource configuration to use a deterministic file URL with `busy_timeout` and single-connection pooling for safer runtime behavior.
+- Updated README architecture documentation to reflect datasource/runtime behavior and include latest MCP smoke validation status.
 
 ### Deprecated
 
@@ -46,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Soft-deleted observations are now excluded from `mem_get_observation`.
 - Timeline queries are now constrained by observation scope/project to prevent cross-context leakage.
 - Private content redaction now uses a compiled regex path for consistent sanitization behavior.
+- Fixed SQL query assembly boundaries in search paths (`mem_search`, `mem_search_advanced`, and fallback search) to prevent malformed statements such as `falseORDER` and `:tag0ORDER`.
+- Added explicit dynamic-clause spacing in tag filters to avoid named-parameter token collisions during query construction.
 
 ### Security
 

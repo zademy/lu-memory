@@ -61,6 +61,7 @@ When using `mem_save` to record a decision, complex pattern, or architecture des
   **Learned**: [Key lessons learned to remember for the future]
 
 - Always use a **valid `type`**: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, or `DOCUMENTATION`.
+- Always specify an **`importanceLevel`**: `HIGH`, `MEDIUM`, or `LOW`, depending on how critical the observation is for future context.
 - Use the **`tags`** argument with comma-separated keywords (e.g., "frontend,react,auth") to improve search.
 - Always use **`projectName`** pointing to the corresponding repository or domain ("cpancode", "lu-memory", "app-frontend", etc.).
 - Include the current **`sessionId`** and corresponding **`topicKey`** to maintain traceability.
@@ -76,9 +77,9 @@ When using `mem_save` to record a decision, complex pattern, or architecture des
 - At the beginning of the session:
   - `mem_session_start` (if starting a new work block).
   - `mem_context` to recover recent state and active topics.
-- If you need context about a specific topic:
+- If you need context about a specific topic or tags:
   1. `mem_search` (or `mem_search_advanced` if you need filters or better ranking)
-     → to find relevant memories.
+     → to find relevant memories. Pass a `tags` parameter (e.g. "architecture,auth") to narrow down results.
   2. `mem_timeline`
      → to see the chronological evolution around a memory.
   3. `mem_get_observation`

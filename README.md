@@ -14,8 +14,8 @@
 - **Session Management**: Explicitly start and end logical chat sessions, keeping a clean timeline of tasks and comprehensive summaries.
 - **Categorized Observations**: Save memories by granular types: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, and `DOCUMENTATION`.
 - **Full-Text Context Recovery**: Powered by SQLite FTS5 (Full-Text Search), instantly retrieve chronological timelines around past observations.
-- **Advanced Search**: High-performance BM25 ranking and result highlighting for deep context retrieval.
-- **Topic & Tag Tracking**: Group related memories by dynamic, evolving "topics" with stable topic keys, and use custom tags for high search precision.
+- **Advanced Search & Filtering**: High-performance BM25 ranking and result highlighting for deep context retrieval, supplemented by precise tag-based filtering.
+- **Topic, Tag & Importance Tracking**: Group related memories by dynamic, evolving "topics" with stable topic keys, assign `HIGH`, `MEDIUM`, or `LOW` importance levels, and use custom tags for high search precision.
 - **Deduplication & Revision Tracking**: Automatically handles content deduplication by hashing (`SHA-256`) and tracks revision counts.
 - **Prompt Templating**: Save reusable instructional prompts as templates via `mem_save_prompt`.
 - **Multi-Tenant / Scopes**: Differentiate local project memory from personal/global memory scopes.
@@ -97,22 +97,22 @@ _(Adjust the path to your compiled `.jar` and Java runtime executable accordingl
 
 The server directly provides these 14 tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
 
-| Capability Area        | Tool Name               | Description & Usage                                                                          |
-| ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
-| **Session Control**    | `mem_session_start`     | Opens a new session with an `agentName` (e.g., "Windsurf") and `branchName`.                 |
-|                        | `mem_session_end`       | Closes an ongoing session. Requires a `status` (`COMPLETED`, `ABORTED`, `FAILED`).           |
-|                        | `mem_session_summary`   | Saves an end-of-session summary reflecting what was accomplished.                            |
-| **Memory Extraction**  | `mem_context`           | Fetches the most recent context from previous sessions natively upon boot/reset.             |
-|                        | `mem_timeline`          | Retrieves a chronological timeline around a specific observation.                            |
-|                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                        |
-| **Observation Mgmt**   | `mem_save`              | Saves grouped observations. Requires `type`, `tags`, `projectName`, and current `sessionId`. |
-|                        | `mem_save_prompt`       | Saves user-specific prompts as templates. Requires `intent` and `source`.                    |
-|                        | `mem_update`            | Revises an existing observation.                                                             |
-|                        | `mem_delete`            | Performs a soft-delete (or hard-delete flag) of an observation.                              |
-| **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable SEO-friendly key for evolving topics.                                       |
-|                        | `mem_search`            | Standard Full-Text Search across the datastore applying SQLite FTS5.                         |
-|                        | `mem_search_advanced`   | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring.         |
-| **System Info**        | `mem_stats`             | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.      |
+| Capability Area        | Tool Name               | Description & Usage                                                                                                                    |
+| ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Session Control**    | `mem_session_start`     | Opens a new session with an `agentName` (e.g., "Windsurf") and `branchName`.                                                           |
+|                        | `mem_session_end`       | Closes an ongoing session. Requires a `status` (`COMPLETED`, `ABORTED`, `FAILED`).                                                     |
+|                        | `mem_session_summary`   | Saves an end-of-session summary reflecting what was accomplished.                                                                      |
+| **Memory Extraction**  | `mem_context`           | Fetches the most recent context from previous sessions natively upon boot/reset.                                                       |
+|                        | `mem_timeline`          | Retrieves a chronological timeline around a specific observation.                                                                      |
+|                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                                                                  |
+| **Observation Mgmt**   | `mem_save`              | Saves grouped observations. Requires `type`, `topicKey`, `title`, `content`, `tags`, `projectName`, `importanceLevel` and `sessionId`. |
+|                        | `mem_save_prompt`       | Saves user-specific prompts as templates. Requires `intent` and `source`.                                                              |
+|                        | `mem_update`            | Revises an existing observation. Supports updating `importanceLevel` and `tags`.                                                       |
+|                        | `mem_delete`            | Performs a soft-delete (or hard-delete flag) of an observation.                                                                        |
+| **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable SEO-friendly key for evolving topics.                                                                                 |
+|                        | `mem_search`            | Standard Full-Text Search across the datastore applying SQLite FTS5. Supports filtering by `tags`.                                     |
+|                        | `mem_search_advanced`   | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring. Supports filtering by `tags`.                     |
+| **System Info**        | `mem_stats`             | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.                                                |
 
 ---
 
@@ -140,6 +140,8 @@ When committing large or architectural content via `mem_save`, utilize the follo
 - [Critical Implementation detail 2]
 
 **Learned**: [Important insights preventing future friction]
+
+_(Note: Always specify an appropriate `importanceLevel` (HIGH, MEDIUM, LOW) and relevant `tags` to make these observations easily retrievable)._
 ```
 
 ---
@@ -152,6 +154,7 @@ For agents using lu-memory, the complete usage rules and examples are located in
 - **`.windsurf\rules\lu-memory.md`** - Windsurf-specific rule file (if exists)
 
 These files contain:
+
 - Session lifecycle protocols (mandatory start/end procedures)
 - Memory format conventions (What/Why/Where structure)
 - Complete workflow examples

@@ -5,10 +5,12 @@ trigger: always_on
 # 🚨 CRITICAL: Session Lifecycle (MANDATORY)
 
 **AT THE START of EVERY conversation:**
+
 1. ALWAYS call `mem_context` FIRST to load previous work state
 2. Then call `mem_session_start` to create a new session in `memory_sessions` table
 
 **AT THE END of EVERY conversation:**
+
 1. ALWAYS call `mem_session_summary` with detailed summary
 2. Then call `mem_session_end` with appropriate status to close the session in `memory_sessions` table
 
@@ -59,6 +61,7 @@ When using `mem_save` to record a decision, complex pattern, or architecture des
   **Learned**: [Key lessons learned to remember for the future]
 
 - Always use a **valid `type`**: `DECISION`, `BUGFIX`, `PATTERN`, `NOTE`, `ARCHITECTURE`, `SUMMARY`, or `DOCUMENTATION`.
+- Always specify an **`importanceLevel`**: `HIGH`, `MEDIUM`, or `LOW`, depending on how critical the observation is for future context.
 - Use the **`tags`** argument with comma-separated keywords (e.g., "frontend,react,auth") to improve search.
 - Always use **`projectName`** pointing to the corresponding repository or domain ("cpancode", "lu-memory", "app-frontend", etc.).
 - Include the current **`sessionId`** and corresponding **`topicKey`** to maintain traceability.
@@ -74,9 +77,9 @@ When using `mem_save` to record a decision, complex pattern, or architecture des
 - At the beginning of the session:
   - `mem_session_start` (if starting a new work block).
   - `mem_context` to recover recent state and active topics.
-- If you need context about a specific topic:
+- If you need context about a specific topic or tags:
   1. `mem_search` (or `mem_search_advanced` if you need filters or better ranking)
-     → to find relevant memories.
+     → to find relevant memories. Pass a `tags` parameter (e.g. "architecture,auth") to narrow down results.
   2. `mem_timeline`
      → to see the chronological evolution around a memory.
   3. `mem_get_observation`
@@ -95,9 +98,10 @@ When using `mem_save` to record a decision, complex pattern, or architecture des
   1. `mem_suggest_topic_key(type="...", title="...")`.
   2. `mem_save(..., topic_key="<suggested-key>")`.
   3. Reuse that same `topic_key` in future updates.
-- If the user's instruction or prompt will be useful as a future template (`saved_prompts` table):
-  - Use `mem_save_prompt` to save it as a reusable reference.
-  - **Mandatory:** Specify the `intent` (e.g., "scaffolding", "refactor", "bugfix") and `source` (e.g., "user-prompt", "agent-template"), and link it to the current `topic_key` and `session_id`.
+- **🚨 PROMPT SAVING (`saved_prompts` table) - MANDATORY:**
+  - **EVERY TIME** the user gives a substantial instruction to build, refactor, scaffold, or structure code/documents, you **MUST** use `mem_save_prompt` to save the initial prompt.
+  - **Do NOT hesitate.** Save the user prompt so it acts as a reusable template for future sessions (e.g., "Add comments to [File]", "Create a React component for [Feature]").
+  - **Mandatory:** Specify the `intent` (e.g., "scaffolding", "refactor", "bugfix", "documentation") and `source` (e.g., "user-prompt", "agent-template"), and link it to the current `topic_key` and `session_id`.
 
 ### 3. Update / Clean Up
 

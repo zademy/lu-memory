@@ -31,6 +31,41 @@ The application is structured as a **Modular Monolith** applying **Clean Archite
   - _Dependency Inversion Principle (DIP)_: Services rely strictly on Data Access abstractions (Spring Data JPA) to decouple business logic from the SQLite dialect.
 - **Event-Driven Resilience**: Leveraging SQLite Triggers allows immediate synchronization between atomic observation tables and their associated FTS5 virtual indexing without polluting the application layer with dual-write concerns.
 
+### 📊 System Architecture
+
+```mermaid
+graph TD
+    subgraph Clients["AI Clients / Agents"]
+        C1["Claude Desktop"]
+        C2["Windsurf"]
+        C3["Cursor"]
+    end
+
+    subgraph App["lu-memory (Spring Boot & Java)"]
+        Tools["Memory Tools (MCP Endpoints)"]
+        Service["Memory Service (Business Logic)"]
+        JPA["Spring Data JPA (Data Access)"]
+    end
+
+    subgraph DB["SQLite Database"]
+        Tables["Core Tables<br>(observations, sessions, prompts)"]
+        Triggers["SQLite Triggers<br>(Auto-sync Event)"]
+        FTS5["FTS5 Virtual Tables<br>(Full-Text Search Index)"]
+    end
+
+    C1 -->|JSON-RPC / stdio| Tools
+    C2 -->|JSON-RPC / stdio| Tools
+    C3 -->|JSON-RPC / stdio| Tools
+
+    Tools -->|Invokes| Service
+    Service -->|Reads / Writes| JPA
+    JPA -->|JDBC Persistence| Tables
+    JPA -->|High-performance Search| FTS5
+
+    Tables -->|Row Insert/Update| Triggers
+    Triggers -->|Synchronize Index| FTS5
+```
+
 ## 🛠 Tech Stack
 
 - **Core & Runtime**: Java 25
@@ -97,25 +132,25 @@ _(Adjust the path to your compiled `.jar` and Java runtime executable accordingl
 
 The server directly provides these 17 tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
 
-| Capability Area        | Tool Name               | Description & Usage                                                                                                                    |
-| ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **Session Control**    | `mem_session_start`     | Opens a new session with an `agentName` (e.g., "Windsurf") and `branchName`.                                                           |
-|                        | `mem_session_end`       | Closes an ongoing session. Requires a `status` (`COMPLETED`, `ABORTED`, `FAILED`).                                                     |
-|                        | `mem_session_summary`   | Saves an end-of-session summary reflecting what was accomplished.                                                                      |
-| **Memory Extraction**  | `mem_context`           | Fetches the most recent context from previous sessions natively upon boot/reset.                                                       |
-|                        | `mem_context_scoped`    | Fetches recent context constrained by `scope` and `projectKey` for better tenant/project isolation.                                    |
-|                        | `mem_timeline`          | Retrieves a chronological timeline around a specific observation.                                                                      |
-|                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                                                                  |
-| **Observation Mgmt**   | `mem_save`              | Saves grouped observations. Requires `type`, `topicKey`, `title`, `content`, `tags`, `projectName`, `importanceLevel` and `sessionId`. |
-|                        | `mem_save_prompt`       | Saves user-specific prompts as templates. Requires `intent` and `source`.                                                              |
-|                        | `mem_update`            | Revises an existing observation. Supports updating `importanceLevel` and `tags`.                                                       |
-|                        | `mem_delete`            | Performs a soft-delete (or hard-delete flag) of an observation.                                                                        |
-| **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable SEO-friendly key for evolving topics.                                                                                 |
-|                        | `mem_search`            | Standard Full-Text Search across the datastore applying SQLite FTS5. Supports filtering by `tags`.                                     |
-|                        | `mem_search_scoped`     | Full-Text Search with explicit `scope` and `projectKey` filtering.                                                                      |
-|                        | `mem_search_advanced`   | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring. Supports filtering by `tags`.                     |
-|                        | `mem_search_advanced_scoped` | Advanced FTS query with explicit `scope` and `projectKey` filtering plus highlights/ranking.                                       |
-| **System Info**        | `mem_stats`             | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.                                                |
+| Capability Area        | Tool Name                    | Description & Usage                                                                                                                    |
+| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Session Control**    | `mem_session_start`          | Opens a new session with an `agentName` (e.g., "Windsurf") and `branchName`.                                                           |
+|                        | `mem_session_end`            | Closes an ongoing session. Requires a `status` (`COMPLETED`, `ABORTED`, `FAILED`).                                                     |
+|                        | `mem_session_summary`        | Saves an end-of-session summary reflecting what was accomplished.                                                                      |
+| **Memory Extraction**  | `mem_context`                | Fetches the most recent context from previous sessions natively upon boot/reset.                                                       |
+|                        | `mem_context_scoped`         | Fetches recent context constrained by `scope` and `projectKey` for better tenant/project isolation.                                    |
+|                        | `mem_timeline`               | Retrieves a chronological timeline around a specific observation.                                                                      |
+|                        | `mem_get_observation`        | Expands and returns the full content payload of a specific memory ID.                                                                  |
+| **Observation Mgmt**   | `mem_save`                   | Saves grouped observations. Requires `type`, `topicKey`, `title`, `content`, `tags`, `projectName`, `importanceLevel` and `sessionId`. |
+|                        | `mem_save_prompt`            | Saves user-specific prompts as templates. Requires `intent` and `source`.                                                              |
+|                        | `mem_update`                 | Revises an existing observation. Supports updating `importanceLevel` and `tags`.                                                       |
+|                        | `mem_delete`                 | Performs a soft-delete (or hard-delete flag) of an observation.                                                                        |
+| **Search & Discovery** | `mem_suggest_topic_key`      | Derives a stable SEO-friendly key for evolving topics.                                                                                 |
+|                        | `mem_search`                 | Standard Full-Text Search across the datastore applying SQLite FTS5. Supports filtering by `tags`.                                     |
+|                        | `mem_search_scoped`          | Full-Text Search with explicit `scope` and `projectKey` filtering.                                                                     |
+|                        | `mem_search_advanced`        | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring. Supports filtering by `tags`.                     |
+|                        | `mem_search_advanced_scoped` | Advanced FTS query with explicit `scope` and `projectKey` filtering plus highlights/ranking.                                           |
+| **System Info**        | `mem_stats`                  | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.                                                |
 
 ---
 

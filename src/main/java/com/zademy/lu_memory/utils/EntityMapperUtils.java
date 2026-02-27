@@ -91,7 +91,8 @@ public final class EntityMapperUtils {
                 entity.isDeleted(),
                 entity.getDeletedAt(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getImportanceLevel());
     }
 
     /**
@@ -144,6 +145,7 @@ public final class EntityMapperUtils {
         row.put(ResponseKeys.UPDATED_AT, observation.getUpdatedAt());
         row.put(ResponseKeys.DELETED, observation.isDeleted());
         row.put(ResponseKeys.DELETED_AT, observation.getDeletedAt());
+        row.put("importanceLevel", observation.getImportanceLevel());
         return row;
     }
 

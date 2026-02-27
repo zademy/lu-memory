@@ -12,6 +12,7 @@ public final class AppConstants {
     public static final String DEFAULT_PROJECT_KEY = "default";
     public static final String DEFAULT_PROJECT_NAME = "default";
     public static final String DEFAULT_TOPIC_KEY = "general-memory";
+    public static final String DEFAULT_IMPORTANCE_LEVEL = "MEDIUM";
 
     // Status keys for operations
     public static final String STATUS_HARD_DELETED = "HARD_DELETED";

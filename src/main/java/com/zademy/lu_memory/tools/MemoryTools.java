@@ -59,7 +59,8 @@ public class MemoryTools {
                         @ToolParam(description = "Session ID (UUID or String)") String sessionId,
                         @ToolParam(description = "Scope: project or personal") String scope,
                         @ToolParam(description = "Source of memory") String source,
-                        @ToolParam(description = "Project name") String projectName) {
+                        @ToolParam(description = "Project name") String projectName,
+                        @ToolParam(description = "Importance level (HIGH, MEDIUM, LOW)") String importanceLevel) {
                 ObservationRecord observation = memoryService.saveObservation(
                                 type,
                                 topicKey,
@@ -69,7 +70,8 @@ public class MemoryTools {
                                 sessionId == null || sessionId.isBlank() ? null : sessionId.trim(),
                                 scope,
                                 source,
-                                projectName);
+                                projectName,
+                                importanceLevel);
 
                 return Map.of(
                                 "id", observation.id(),
@@ -86,7 +88,8 @@ public class MemoryTools {
                         @ToolParam(description = "Title") String title,
                         @ToolParam(description = "Content") String content,
                         @ToolParam(description = "Comma separated tags") String tags,
-                        @ToolParam(description = "Project name") String projectName) {
+                        @ToolParam(description = "Project name") String projectName,
+                        @ToolParam(description = "Importance level (HIGH, MEDIUM, LOW)") String importanceLevel) {
                 ObservationRecord updated = memoryService.updateObservation(
                                 UUID.fromString(observationId),
                                 type,
@@ -94,7 +97,8 @@ public class MemoryTools {
                                 title,
                                 content,
                                 tags,
-                                projectName);
+                                projectName,
+                                importanceLevel);
 
                 return Map.of(
                                 "id", updated.id(),
@@ -120,6 +124,7 @@ public class MemoryTools {
         @Tool(name = "mem_search", description = "Full-text search across all memories")
         public Map<String, Object> memSearch(
                         @ToolParam(description = "Search query") String query,
+                        @ToolParam(description = "Comma separated tags to filter by") String tags,
                         @ToolParam(description = "Max rows to return") Integer limit,
                         @ToolParam(description = "Include deleted observations") Boolean includeDeleted) {
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
@@ -127,12 +132,13 @@ public class MemoryTools {
                 return Map.of(
                                 "query", query,
                                 "limit", maxRows,
-                                "results", memoryService.searchMemories(query, maxRows, includeDeletedRows));
+                                "results", memoryService.searchMemories(query, tags, maxRows, includeDeletedRows));
         }
 
         @Tool(name = "mem_search_advanced", description = "Advanced full-text search with highlighting and enhanced ranking")
         public Map<String, Object> memSearchAdvanced(
                         @ToolParam(description = "Search query (supports AND, OR, NOT, \"exact phrases\")") String query,
+                        @ToolParam(description = "Comma separated tags to filter by") String tags,
                         @ToolParam(description = "Max rows to return") Integer limit,
                         @ToolParam(description = "Include deleted observations") Boolean includeDeleted) {
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
@@ -140,7 +146,8 @@ public class MemoryTools {
                 return Map.of(
                                 "query", query,
                                 "limit", maxRows,
-                                "results", memoryService.searchMemoriesAdvanced(query, maxRows, includeDeletedRows));
+                                "results",
+                                memoryService.searchMemoriesAdvanced(query, tags, maxRows, includeDeletedRows));
         }
 
         @Tool(name = "mem_session_summary", description = "Save end-of-session summary")

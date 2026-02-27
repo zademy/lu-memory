@@ -133,18 +133,20 @@ public class MemoryService {
      * Stores a granular piece of memory (observation) within the persistence layer.
      * Evaluates whether to create a new entry or update/increment a duplicate.
      *
-     * @param type        The classification type of the observation (e.g.,
-     *                    DECISION, NOTE).
-     * @param topicKey    The logical grouping key for the memory.
-     * @param title       A brief descriptive title.
-     * @param content     The comprehensive text payload to store (will be redacted
-     *                    if private).
-     * @param tags        Comma-separated values acting as lookup metadata.
-     * @param sessionId   The current active session UUID string associated with
-     *                    this memory.
-     * @param scope       Visibility boundary (e.g., "project" or "personal").
-     * @param source      The mechanism that originated this memory.
-     * @param projectName The domain name for multi-project isolation.
+     * @param type            The classification type of the observation (e.g.,
+     *                        DECISION, NOTE).
+     * @param topicKey        The logical grouping key for the memory.
+     * @param title           A brief descriptive title.
+     * @param content         The comprehensive text payload to store (will be
+     *                        redacted
+     *                        if private).
+     * @param tags            Comma-separated values acting as lookup metadata.
+     * @param sessionId       The current active session UUID string associated with
+     *                        this memory.
+     * @param scope           Visibility boundary (e.g., "project" or "personal").
+     * @param source          The mechanism that originated this memory.
+     * @param projectName     The domain name for multi-project isolation.
+     * @param importanceLevel The configured importance level (HIGH, MEDIUM, LOW)
      * @return The saved or updated {@link ObservationEntity}.
      */
     @Transactional
@@ -157,7 +159,8 @@ public class MemoryService {
             String sessionId,
             String scope,
             String source,
-            String projectName) {
+            String projectName,
+            String importanceLevel) {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException(ErrorMessages.CONTENT_REQUIRED);
         }
@@ -191,6 +194,9 @@ public class MemoryService {
                 if (TextProcessingUtils.normalize(tags) != null) {
                     existing.setTagsText(TextProcessingUtils.normalize(tags));
                 }
+                if (TextProcessingUtils.normalize(importanceLevel) != null) {
+                    existing.setImportanceLevel(importanceLevel.trim().toUpperCase(Locale.ROOT));
+                }
                 existing.setRevisionCount(existing.getRevisionCount() + 1);
                 existing.setContentHash(contentHash);
             }
@@ -212,6 +218,9 @@ public class MemoryService {
         observation.setProjectName(
                 TextProcessingUtils.normalize(projectName) != null ? TextProcessingUtils.normalize(projectName)
                         : AppConstants.DEFAULT_PROJECT_NAME);
+        observation.setImportanceLevel(
+                TextProcessingUtils.normalize(importanceLevel) != null ? importanceLevel.trim().toUpperCase(Locale.ROOT)
+                        : AppConstants.DEFAULT_IMPORTANCE_LEVEL);
         observation.setContentHash(contentHash);
         observation.setDuplicateCount(0);
         observation.setRevisionCount(1);
@@ -223,13 +232,14 @@ public class MemoryService {
      * Updates an existing observation with new data.
      * Increments revision count if content significantly changes.
      *
-     * @param observationId The unique identifier of the observation.
-     * @param type          The new type classification (optional).
-     * @param topicKey      The new topic key (optional).
-     * @param title         The new title (optional).
-     * @param content       The new content payload (optional).
-     * @param tags          The new tags metadata (optional).
-     * @param projectName   The new project name (optional).
+     * @param observationId   The unique identifier of the observation.
+     * @param type            The new type classification (optional).
+     * @param topicKey        The new topic key (optional).
+     * @param title           The new title (optional).
+     * @param content         The new content payload (optional).
+     * @param tags            The new tags metadata (optional).
+     * @param projectName     The new project name (optional).
+     * @param importanceLevel The new importance level (optional).
      * @return The updated {@link ObservationRecord}.
      * @throws IllegalArgumentException if the observation is not found.
      */
@@ -241,7 +251,8 @@ public class MemoryService {
             String title,
             String content,
             String tags,
-            String projectName) {
+            String projectName,
+            String importanceLevel) {
         ObservationEntity observation = observationRepository.findById(observationId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
@@ -262,6 +273,9 @@ public class MemoryService {
         }
         if (TextProcessingUtils.normalize(projectName) != null) {
             observation.setProjectName(projectName.trim());
+        }
+        if (TextProcessingUtils.normalize(importanceLevel) != null) {
+            observation.setImportanceLevel(importanceLevel.trim().toUpperCase(Locale.ROOT));
         }
 
         return EntityMapperUtils.toObservationRecord(observationRepository.save(observation));
@@ -347,17 +361,29 @@ public class MemoryService {
      * Provides high-performance ranked retrieval based on relevance (BM25).
      *
      * @param query          The search string or FTS query.
+     * @param tags           Comma separated tags to filter by.
      * @param limit          Maximum number of results to return.
      * @param includeDeleted Whether to search within soft-deleted observations.
      * @return A list of matching memory records with relevance scores.
      */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> searchMemories(String query, int limit, boolean includeDeleted) {
+    public List<Map<String, Object>> searchMemories(String query, String tags, int limit, boolean includeDeleted) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
 
         try {
+            // Build tag filter conditions
+            StringBuilder tagFilter = new StringBuilder();
+            if (TextProcessingUtils.normalize(tags) != null) {
+                String[] tagArray = tags.split(",");
+                for (String t : tagArray) {
+                    if (!t.isBlank()) {
+                        tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
+                    }
+                }
+            }
+
             // Use SQLite FTS5 for full-text search
             String sql = """
                     SELECT o.id,
@@ -365,16 +391,17 @@ public class MemoryService {
                            o.topic_key,
                            o.title,
                            o.content,
+                           o.importance_level,
                            o.created_at,
                            o.deleted,
                            bm25(observations_fts) AS score
                     FROM observations o
                     JOIN observations_fts fts ON o.rowid = fts.rowid
-                    WHERE (%s)
+                    WHERE (%s) %s
                       AND observations_fts MATCH ?
                     ORDER BY score ASC, o.created_at DESC
                     LIMIT ?
-                    """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
+                    """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
 
             return jdbcTemplate.query(sql, (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -383,6 +410,7 @@ public class MemoryService {
                 row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
                 row.put(ResponseKeys.TITLE, rs.getString("title"));
                 row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
+                row.put("importanceLevel", rs.getString("importance_level"));
                 row.put(ResponseKeys.SCORE, rs.getDouble("score"));
                 row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
                 row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
@@ -391,7 +419,7 @@ public class MemoryService {
         } catch (Exception e) {
             LOGGER.error("FTS5 search error: " + e.getMessage(), e);
             // Fallback to simple search without FTS
-            return fallbackSearch(query, limit, includeDeleted);
+            return fallbackSearch(query, tags, limit, includeDeleted);
         }
     }
 
@@ -401,18 +429,31 @@ public class MemoryService {
      * Uses enhanced query syntax to improve recall.
      *
      * @param query          The natural language query.
+     * @param tags           Comma separated tags to filter by.
      * @param limit          Maximum results.
      * @param includeDeleted Include soft-deleted records.
      * @return Memory records with highlighted snippets.
      */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> searchMemoriesAdvanced(String query, int limit, boolean includeDeleted) {
+    public List<Map<String, Object>> searchMemoriesAdvanced(String query, String tags, int limit,
+            boolean includeDeleted) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
 
         // Advanced search with FTS5 using different operators
         String ftsQuery = SearchQueryUtils.enhanceFtsQuery(query);
+
+        // Build tag filter conditions
+        StringBuilder tagFilter = new StringBuilder();
+        if (TextProcessingUtils.normalize(tags) != null) {
+            String[] tagArray = tags.split(",");
+            for (String t : tagArray) {
+                if (!t.isBlank()) {
+                    tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
+                }
+            }
+        }
 
         String sql = """
                 SELECT o.id,
@@ -421,17 +462,18 @@ public class MemoryService {
                        o.title,
                        o.content,
                        o.tags_text,
+                       o.importance_level,
                        o.created_at,
                        o.deleted,
                        bm25(observations_fts) AS score,
                         snippet(observations_fts, 2, '<mark>', '</mark>', '...', 64) AS highlighted_content
                 FROM observations o
                 JOIN observations_fts fts ON o.rowid = fts.rowid
-                WHERE (%s)
+                WHERE (%s) %s
                   AND observations_fts MATCH ?
                 ORDER BY score ASC, o.created_at DESC
                 LIMIT ?
-                """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
+                """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -442,6 +484,7 @@ public class MemoryService {
             row.put(ResponseKeys.CONTENT, rs.getString("content"));
             row.put(ResponseKeys.HIGHLIGHTED_CONTENT, rs.getString("highlighted_content"));
             row.put(ResponseKeys.TAGS, rs.getString("tags_text"));
+            row.put("importanceLevel", rs.getString("importance_level"));
             row.put(ResponseKeys.SCORE, rs.getDouble("score"));
             row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
             row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
@@ -482,7 +525,8 @@ public class MemoryService {
                 sessionId.toString(),
                 "project",
                 "mem_session_summary",
-                "default");
+                "default",
+                AppConstants.DEFAULT_IMPORTANCE_LEVEL);
     }
 
     /**
@@ -677,7 +721,17 @@ public class MemoryService {
      * Fallback search implementation when FTS5 is unavailable or fails.
      * Uses standard SQL LIKE operator for basic substring matching.
      */
-    private List<Map<String, Object>> fallbackSearch(String query, int limit, boolean includeDeleted) {
+    private List<Map<String, Object>> fallbackSearch(String query, String tags, int limit, boolean includeDeleted) {
+        StringBuilder tagFilter = new StringBuilder();
+        if (TextProcessingUtils.normalize(tags) != null) {
+            String[] tagArray = tags.split(",");
+            for (String t : tagArray) {
+                if (!t.isBlank()) {
+                    tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
+                }
+            }
+        }
+
         String likeQuery = "%" + query.toLowerCase(Locale.ROOT) + "%";
         String sql = """
                 SELECT o.id,
@@ -685,14 +739,15 @@ public class MemoryService {
                        o.topic_key,
                        o.title,
                        o.content,
+                       o.importance_level,
                        o.created_at,
                        o.deleted
                 FROM observations o
-                WHERE (%s)
+                WHERE (%s) %s
                   AND (LOWER(o.title) LIKE ? OR LOWER(o.content) LIKE ?)
                 ORDER BY o.created_at DESC
                 LIMIT ?
-                """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
+                """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -701,6 +756,7 @@ public class MemoryService {
             row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
             row.put(ResponseKeys.TITLE, rs.getString("title"));
             row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
+            row.put("importanceLevel", rs.getString("importance_level"));
             row.put(ResponseKeys.SCORE, 0.0); // No semantic scoring available
             row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
             row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));

@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS observations (
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    importance_level TEXT NOT NULL DEFAULT 'MEDIUM'
 );
 
 -- 2. Table memory_sessions
@@ -53,6 +54,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
     content,
     tags_text,
     source,
+    importance_level,
     content='observations',
     content_rowid='rowid'
 );
@@ -62,8 +64,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
 -- Trigger for INSERT
 CREATE TRIGGER IF NOT EXISTS observations_ai AFTER INSERT ON observations
 BEGIN
-    INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source)
-    VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source);
+    INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source, importance_level)
+    VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source, NEW.importance_level);
 END;
 
 -- Trigger for DELETE
@@ -76,6 +78,6 @@ END;
 CREATE TRIGGER IF NOT EXISTS observations_au AFTER UPDATE ON observations
 BEGIN
     DELETE FROM observations_fts WHERE rowid = OLD.rowid;
-    INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source)
-    VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source);
+    INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source, importance_level)
+    VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source, NEW.importance_level);
 END;

@@ -84,6 +84,9 @@ public class ObservationEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "importance_level", nullable = false, length = 20)
+    private String importanceLevel = AppConstants.DEFAULT_IMPORTANCE_LEVEL;
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
@@ -246,5 +249,13 @@ public class ObservationEntity {
 
     public void setLastSeenAt(Instant lastSeenAt) {
         this.lastSeenAt = lastSeenAt;
+    }
+
+    public String getImportanceLevel() {
+        return importanceLevel;
+    }
+
+    public void setImportanceLevel(String importanceLevel) {
+        this.importanceLevel = importanceLevel;
     }
 }

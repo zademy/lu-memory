@@ -453,10 +453,8 @@ public class MemoryService {
 
             appendTagFilters(sql, parameters, tagFilters);
 
-            sql.append("""
-                    ORDER BY score ASC, o.created_at DESC
-                    LIMIT :limit
-                    """);
+            sql.append("\n ORDER BY score ASC, o.created_at DESC");
+            sql.append("\n LIMIT :limit");
 
             return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -553,10 +551,8 @@ public class MemoryService {
         }
         appendTagFilters(sql, parameters, tagFilters);
 
-        sql.append("""
-                ORDER BY score ASC, o.created_at DESC
-                LIMIT :limit
-                """);
+        sql.append("\n ORDER BY score ASC, o.created_at DESC");
+        sql.append("\n LIMIT :limit");
 
         return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -874,10 +870,8 @@ public class MemoryService {
         }
         appendTagFilters(sql, parameters, tagFilters);
 
-        sql.append("""
-                ORDER BY o.created_at DESC
-                LIMIT :limit
-                """);
+        sql.append("\n ORDER BY o.created_at DESC");
+        sql.append("\n LIMIT :limit");
 
         return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -977,7 +971,7 @@ public class MemoryService {
     private void appendTagFilters(StringBuilder sql, MapSqlParameterSource parameters, List<String> tags) {
         for (int i = 0; i < tags.size(); i++) {
             String key = "tag" + i;
-            sql.append(" AND LOWER(COALESCE(o.tags_text, '')) LIKE :").append(key);
+            sql.append(" AND LOWER(COALESCE(o.tags_text, '')) LIKE :").append(key).append(" ");
             parameters.addValue(key, "%" + tags.get(i) + "%");
         }
     }

@@ -16,12 +16,14 @@ spring:
         tool-change-notification: true
         prompt-change-notification: true
   datasource:
-    url: ${DB_URL:jdbc:sqlite:./lu-memory.db}
+    # Use a stable absolute file path by default to avoid runtime CWD-dependent DB resolution.
+    url: ${DB_URL:jdbc:sqlite:file:${DB_PATH:${user.dir}/lu-memory.db}?busy_timeout=5000}
     driver-class-name: org.sqlite.JDBC
     hikari:
       connection-timeout: 20000
-      maximum-pool-size: 5
-      minimum-idle: 2
+      # SQLite works best with a single write connection.
+      maximum-pool-size: 1
+      minimum-idle: 1
       idle-timeout: 300000
       max-lifetime: 1200000
       auto-commit: true

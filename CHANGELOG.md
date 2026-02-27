@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic CRUD operations for handling sessions, observations, and saved prompts.
 - Foundational standard community files: `README.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.adoc`, and dual-attributed `LICENSE`.
 - Maven Wrapper (`mvnw`) configuration for ease of building the project.
+- 22 comprehensive Windsurf Skills (`.windsurf/skills/`) for Spring Boot design patterns with step-by-step implementation guides and Refactoring Guru analogies.
+- 22 Windsurf Rules (`.windsurf/rules/`) for Spring Boot design patterns including Real-World Analogies.
+- `software-architect` Windsurf Skill for architectural decision-making, SOLID enforcement, and Context7 MCP usage.
 
 ### Changed
 

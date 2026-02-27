@@ -95,7 +95,7 @@ _(Adjust the path to your compiled `.jar` and Java runtime executable accordingl
 
 ## 🧰 Available MCP Tools Reference
 
-The server directly provides these 14 tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
+The server directly provides these 17 tools via MCP. Agents should leverage them based on the standard **Memory Protocol**:
 
 | Capability Area        | Tool Name               | Description & Usage                                                                                                                    |
 | ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -103,6 +103,7 @@ The server directly provides these 14 tools via MCP. Agents should leverage them
 |                        | `mem_session_end`       | Closes an ongoing session. Requires a `status` (`COMPLETED`, `ABORTED`, `FAILED`).                                                     |
 |                        | `mem_session_summary`   | Saves an end-of-session summary reflecting what was accomplished.                                                                      |
 | **Memory Extraction**  | `mem_context`           | Fetches the most recent context from previous sessions natively upon boot/reset.                                                       |
+|                        | `mem_context_scoped`    | Fetches recent context constrained by `scope` and `projectKey` for better tenant/project isolation.                                    |
 |                        | `mem_timeline`          | Retrieves a chronological timeline around a specific observation.                                                                      |
 |                        | `mem_get_observation`   | Expands and returns the full content payload of a specific memory ID.                                                                  |
 | **Observation Mgmt**   | `mem_save`              | Saves grouped observations. Requires `type`, `topicKey`, `title`, `content`, `tags`, `projectName`, `importanceLevel` and `sessionId`. |
@@ -111,7 +112,9 @@ The server directly provides these 14 tools via MCP. Agents should leverage them
 |                        | `mem_delete`            | Performs a soft-delete (or hard-delete flag) of an observation.                                                                        |
 | **Search & Discovery** | `mem_suggest_topic_key` | Derives a stable SEO-friendly key for evolving topics.                                                                                 |
 |                        | `mem_search`            | Standard Full-Text Search across the datastore applying SQLite FTS5. Supports filtering by `tags`.                                     |
+|                        | `mem_search_scoped`     | Full-Text Search with explicit `scope` and `projectKey` filtering.                                                                      |
 |                        | `mem_search_advanced`   | Advanced FTS query mechanism returning highlighted insights and BM25 ranked scoring. Supports filtering by `tags`.                     |
+|                        | `mem_search_advanced_scoped` | Advanced FTS query with explicit `scope` and `projectKey` filtering plus highlights/ranking.                                       |
 | **System Info**        | `mem_stats`             | Outputs global diagnostic statistics such as row counts, active topics, and duplicates.                                                |
 
 ---

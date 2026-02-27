@@ -28,6 +28,9 @@ public final class ResponseKeys {
     public static final String SOURCE = "source";
     public static final String SESSION_ID = "sessionId";
     public static final String PROJECT_NAME = "projectName";
+    public static final String PROJECT_KEY = "projectKey";
+    public static final String SCOPE = "scope";
+    public static final String IMPORTANCE_LEVEL = "importanceLevel";
     public static final String HIGHLIGHTED_CONTENT = "highlightedContent";
 
     // Session keys

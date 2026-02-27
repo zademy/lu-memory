@@ -62,7 +62,9 @@ public interface ObservationRepository extends JpaRepository<ObservationEntity, 
    * @param topicKey the topic key within the project
    * @return an Optional containing the matching observation if found, empty otherwise
    */
-  Optional<ObservationEntity> findByScopeAndProjectKeyAndTopicKeyAndDeletedFalse(String scope, String projectKey,
+  Optional<ObservationEntity> findTopByScopeAndProjectKeyAndTopicKeyAndDeletedFalseOrderByUpdatedAtDesc(
+      String scope,
+      String projectKey,
       String topicKey);
 
   /**
@@ -97,10 +99,12 @@ public interface ObservationRepository extends JpaRepository<ObservationEntity, 
   @Query("""
       select o from ObservationEntity o
       where o.deleted = false
+        and (:scope is null or o.scope = :scope)
+        and (:projectKey is null or o.projectKey = :projectKey)
         and (:topicKey is null or o.topicKey = :topicKey)
       order by o.createdAt desc
       """)
-  List<ObservationEntity> findRecentByTopicKey(String topicKey, Pageable pageable);
+  List<ObservationEntity> findRecent(String scope, String projectKey, String topicKey, Pageable pageable);
 
   /**
    * Retrieves observations within a specific time range for timeline generation.
@@ -117,8 +121,10 @@ public interface ObservationRepository extends JpaRepository<ObservationEntity, 
   @Query("""
       select o from ObservationEntity o
       where o.deleted = false
+        and o.scope = :scope
+        and o.projectKey = :projectKey
         and o.createdAt between :from and :to
       order by o.createdAt asc
       """)
-  List<ObservationEntity> findTimeline(Instant from, Instant to, Pageable pageable);
+  List<ObservationEntity> findTimeline(String scope, String projectKey, Instant from, Instant to, Pageable pageable);
 }

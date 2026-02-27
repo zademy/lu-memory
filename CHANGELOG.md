@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New scoped MCP tools: `mem_context_scoped`, `mem_search_scoped`, and `mem_search_advanced_scoped` for project/scope-isolated memory retrieval.
+- Response payloads now include `scope`, `projectKey`, and normalized `importanceLevel` fields for stronger multi-tenant context clarity.
+- Validation error messages for invalid `scope`, `importanceLevel`, `status`, and empty search `query` inputs.
+- SQLite performance indexes for hot paths on `observations`, `memory_sessions`, and `saved_prompts`.
 - Maintained and authored by **zademy**.
 - Initial project architecture inspired by the Gentleman-Programming/engram concept.
 - Setup Model Context Protocol (MCP) server core for Java/Spring Boot.
@@ -22,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Documented MCP tool count updated from **14** to **17** in `README.md`.
+- Refactored `MemoryService` search flows to use parameterized `NamedParameterJdbcTemplate` with optional scope/project/tag filters.
+- Context retrieval now supports explicit scope/project filtering and normalized `topicKey` handling.
+- Session status handling now enforces valid enum values (`STARTED`, `COMPLETED`, `FAILED`, `ABORTED`).
+- Spring bean method name corrected from `weatherTools` to `memoryToolsProvider` for semantic accuracy.
 - Refactored the internal code structure to adhere to **Clean Architecture** and **SOLID** principles, effectively abstracting SQLite persistence details.
 
 ### Deprecated
@@ -34,11 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- N/A
+- Soft-deleted observations are now excluded from `mem_get_observation`.
+- Timeline queries are now constrained by observation scope/project to prevent cross-context leakage.
+- Private content redaction now uses a compiled regex path for consistent sanitization behavior.
 
 ### Security
 
-- N/A
+- Dynamic SQL tag filtering now uses bound parameters instead of string concatenation to reduce injection risk.
 
 ## [0.1.0] - YYYY-MM-DD
 

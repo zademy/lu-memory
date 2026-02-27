@@ -81,3 +81,19 @@ BEGIN
     INSERT INTO observations_fts(rowid, type, topic_key, title, content, tags_text, source, importance_level)
     VALUES (NEW.rowid, NEW.type, NEW.topic_key, NEW.title, NEW.content, NEW.tags_text, NEW.source, NEW.importance_level);
 END;
+
+-- 6. Performance indexes
+CREATE INDEX IF NOT EXISTS idx_observations_deleted_created_at
+ON observations(deleted, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_observations_scope_project_topic_deleted
+ON observations(scope, project_key, topic_key, deleted);
+
+CREATE INDEX IF NOT EXISTS idx_observations_content_hash
+ON observations(content_hash);
+
+CREATE INDEX IF NOT EXISTS idx_memory_sessions_status_started_at
+ON memory_sessions(status, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_saved_prompts_topic_created_at
+ON saved_prompts(topic_key, created_at DESC);

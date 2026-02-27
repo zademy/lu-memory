@@ -21,17 +21,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * <b>Core Domain Service</b> for managing the lifecycle of sessions,
@@ -59,6 +64,9 @@ public class MemoryService {
     private final PromptRepository promptRepository;
     private final SessionRepository sessionRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    private static final Pattern PRIVATE_BLOCK_PATTERN = Pattern.compile("(?s)<private>.*?</private>");
 
     /**
      * Constructs the MemoryService with required repositories and JDBC template.
@@ -74,11 +82,13 @@ public class MemoryService {
             ObservationRepository observationRepository,
             PromptRepository promptRepository,
             SessionRepository sessionRepository,
-            JdbcTemplate jdbcTemplate) {
+            JdbcTemplate jdbcTemplate,
+            NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.observationRepository = observationRepository;
         this.promptRepository = promptRepository;
         this.sessionRepository = sessionRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     /**
@@ -111,9 +121,7 @@ public class MemoryService {
         SessionEntity session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.SESSION_NOT_FOUND + sessionId));
 
-        session.setStatus(
-                TextProcessingUtils.normalize(status) == null ? SessionStatus.COMPLETED.name()
-                        : status.trim().toUpperCase(Locale.ROOT));
+        session.setStatus(resolveSessionStatus(status));
 
         String normSummary = TextProcessingUtils.normalize(summary);
         if (normSummary != null) {
@@ -165,17 +173,19 @@ public class MemoryService {
             throw new IllegalArgumentException(ErrorMessages.CONTENT_REQUIRED);
         }
 
-        // Sanitize content (redact <private>...</private>)
-        String sanitizedContent = content.replaceAll("(?s)<private>.*?</private>", "[REDACTED]");
-        String actualScope = TextProcessingUtils.normalize(scope) == null ? AppConstants.DEFAULT_SCOPE
-                : scope.trim().toLowerCase(Locale.ROOT);
+        String sanitizedContent = redactPrivateContent(content);
+        String actualScope = normalizeScope(scope);
+        String projectKey = resolveProjectKey(projectName);
         String actualTopicKey = resolveTopicKey(topicKey, title, sanitizedContent);
-        String projectKey = AppConstants.DEFAULT_PROJECT_KEY;
         String contentHash = TextProcessingUtils.computeHash(sanitizedContent);
+        String actualImportanceLevel = normalizeImportanceLevel(importanceLevel);
 
         // Check for existing observations to handle de-duplication or revisions
         Optional<ObservationEntity> existingOpt = observationRepository
-                .findByScopeAndProjectKeyAndTopicKeyAndDeletedFalse(actualScope, projectKey, actualTopicKey);
+                .findTopByScopeAndProjectKeyAndTopicKeyAndDeletedFalseOrderByUpdatedAtDesc(
+                        actualScope,
+                        projectKey,
+                        actualTopicKey);
 
         if (existingOpt.isPresent()) {
             ObservationEntity existing = existingOpt.get();
@@ -195,7 +205,7 @@ public class MemoryService {
                     existing.setTagsText(TextProcessingUtils.normalize(tags));
                 }
                 if (TextProcessingUtils.normalize(importanceLevel) != null) {
-                    existing.setImportanceLevel(importanceLevel.trim().toUpperCase(Locale.ROOT));
+                    existing.setImportanceLevel(actualImportanceLevel);
                 }
                 existing.setRevisionCount(existing.getRevisionCount() + 1);
                 existing.setContentHash(contentHash);
@@ -218,9 +228,7 @@ public class MemoryService {
         observation.setProjectName(
                 TextProcessingUtils.normalize(projectName) != null ? TextProcessingUtils.normalize(projectName)
                         : AppConstants.DEFAULT_PROJECT_NAME);
-        observation.setImportanceLevel(
-                TextProcessingUtils.normalize(importanceLevel) != null ? importanceLevel.trim().toUpperCase(Locale.ROOT)
-                        : AppConstants.DEFAULT_IMPORTANCE_LEVEL);
+        observation.setImportanceLevel(actualImportanceLevel);
         observation.setContentHash(contentHash);
         observation.setDuplicateCount(0);
         observation.setRevisionCount(1);
@@ -253,7 +261,7 @@ public class MemoryService {
             String tags,
             String projectName,
             String importanceLevel) {
-        ObservationEntity observation = observationRepository.findById(observationId)
+        ObservationEntity observation = observationRepository.findByIdAndDeletedFalse(observationId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
         if (TextProcessingUtils.normalize(type) != null) {
@@ -266,17 +274,25 @@ public class MemoryService {
             observation.setTitle(title.trim());
         }
         if (TextProcessingUtils.normalize(content) != null) {
-            observation.setContent(content.trim());
+            String sanitizedContent = redactPrivateContent(content);
+            String newHash = TextProcessingUtils.computeHash(sanitizedContent);
+            if (!Objects.equals(newHash, observation.getContentHash())) {
+                observation.setContent(sanitizedContent.trim());
+                observation.setContentHash(newHash);
+                observation.setRevisionCount(observation.getRevisionCount() + 1);
+            }
         }
         if (tags != null) {
             observation.setTagsText(TextProcessingUtils.normalize(tags));
         }
         if (TextProcessingUtils.normalize(projectName) != null) {
             observation.setProjectName(projectName.trim());
+            observation.setProjectKey(resolveProjectKey(projectName));
         }
         if (TextProcessingUtils.normalize(importanceLevel) != null) {
-            observation.setImportanceLevel(importanceLevel.trim().toUpperCase(Locale.ROOT));
+            observation.setImportanceLevel(normalizeImportanceLevel(importanceLevel));
         }
+        observation.setLastSeenAt(Instant.now());
 
         return EntityMapperUtils.toObservationRecord(observationRepository.save(observation));
     }
@@ -368,24 +384,30 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> searchMemories(String query, String tags, int limit, boolean includeDeleted) {
+        return searchMemoriesScoped(query, tags, limit, includeDeleted, null, null);
+    }
+
+    /**
+     * Searches memories with optional scope/project filtering.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> searchMemoriesScoped(
+            String query,
+            String tags,
+            int limit,
+            boolean includeDeleted,
+            String scope,
+            String projectKey) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
 
-        try {
-            // Build tag filter conditions
-            StringBuilder tagFilter = new StringBuilder();
-            if (TextProcessingUtils.normalize(tags) != null) {
-                String[] tagArray = tags.split(",");
-                for (String t : tagArray) {
-                    if (!t.isBlank()) {
-                        tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
-                    }
-                }
-            }
+        String normalizedScope = normalizeScopeOrNull(scope);
+        String normalizedProjectKey = normalizeProjectKeyOrNull(projectKey);
+        List<String> tagFilters = normalizeTagFilters(tags);
 
-            // Use SQLite FTS5 for full-text search
-            String sql = """
+        try {
+            StringBuilder sql = new StringBuilder("""
                     SELECT o.id,
                            o.type,
                            o.topic_key,
@@ -397,29 +419,54 @@ public class MemoryService {
                            bm25(observations_fts) AS score
                     FROM observations o
                     JOIN observations_fts fts ON o.rowid = fts.rowid
-                    WHERE (%s) %s
-                      AND observations_fts MATCH ?
-                    ORDER BY score ASC, o.created_at DESC
-                    LIMIT ?
-                    """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
+                    WHERE observations_fts MATCH :query
+                    """);
 
-            return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            if (!includeDeleted) {
+                sql.append(" AND o.deleted = false");
+            }
+            if (normalizedScope != null) {
+                sql.append(" AND o.scope = :scope");
+            }
+            if (normalizedProjectKey != null) {
+                sql.append(" AND o.project_key = :projectKey");
+            }
+
+            MapSqlParameterSource parameters = new MapSqlParameterSource();
+            parameters.addValue("query", query);
+            parameters.addValue("limit", limit);
+
+            if (normalizedScope != null) {
+                parameters.addValue("scope", normalizedScope);
+            }
+            if (normalizedProjectKey != null) {
+                parameters.addValue("projectKey", normalizedProjectKey);
+            }
+
+            appendTagFilters(sql, parameters, tagFilters);
+
+            sql.append("""
+                    ORDER BY score ASC, o.created_at DESC
+                    LIMIT :limit
+                    """);
+
+            return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put(ResponseKeys.ID, rs.getString("id"));
                 row.put(ResponseKeys.TYPE, rs.getString("type"));
                 row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
                 row.put(ResponseKeys.TITLE, rs.getString("title"));
                 row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
-                row.put("importanceLevel", rs.getString("importance_level"));
+                row.put(ResponseKeys.IMPORTANCE_LEVEL, rs.getString("importance_level"));
                 row.put(ResponseKeys.SCORE, rs.getDouble("score"));
                 row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
                 row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
                 return row;
-            }, query, limit);
+            });
         } catch (Exception e) {
             LOGGER.error("FTS5 search error: " + e.getMessage(), e);
             // Fallback to simple search without FTS
-            return fallbackSearch(query, tags, limit, includeDeleted);
+            return fallbackSearch(query, tags, limit, includeDeleted, normalizedScope, normalizedProjectKey);
         }
     }
 
@@ -437,25 +484,31 @@ public class MemoryService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> searchMemoriesAdvanced(String query, String tags, int limit,
             boolean includeDeleted) {
+        return searchMemoriesAdvancedScoped(query, tags, limit, includeDeleted, null, null);
+    }
+
+    /**
+     * Performs advanced full-text search with optional scope/project filtering.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> searchMemoriesAdvancedScoped(
+            String query,
+            String tags,
+            int limit,
+            boolean includeDeleted,
+            String scope,
+            String projectKey) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
 
         // Advanced search with FTS5 using different operators
         String ftsQuery = SearchQueryUtils.enhanceFtsQuery(query);
+        String normalizedScope = normalizeScopeOrNull(scope);
+        String normalizedProjectKey = normalizeProjectKeyOrNull(projectKey);
+        List<String> tagFilters = normalizeTagFilters(tags);
 
-        // Build tag filter conditions
-        StringBuilder tagFilter = new StringBuilder();
-        if (TextProcessingUtils.normalize(tags) != null) {
-            String[] tagArray = tags.split(",");
-            for (String t : tagArray) {
-                if (!t.isBlank()) {
-                    tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
-                }
-            }
-        }
-
-        String sql = """
+        StringBuilder sql = new StringBuilder("""
                 SELECT o.id,
                        o.type,
                        o.topic_key,
@@ -469,27 +522,50 @@ public class MemoryService {
                         snippet(observations_fts, 2, '<mark>', '</mark>', '...', 64) AS highlighted_content
                 FROM observations o
                 JOIN observations_fts fts ON o.rowid = fts.rowid
-                WHERE (%s) %s
-                  AND observations_fts MATCH ?
-                ORDER BY score ASC, o.created_at DESC
-                LIMIT ?
-                """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
+                WHERE observations_fts MATCH :query
+                """);
 
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+        if (!includeDeleted) {
+            sql.append(" AND o.deleted = false");
+        }
+        if (normalizedScope != null) {
+            sql.append(" AND o.scope = :scope");
+        }
+        if (normalizedProjectKey != null) {
+            sql.append(" AND o.project_key = :projectKey");
+        }
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+        parameters.addValue("query", ftsQuery);
+        parameters.addValue("limit", limit);
+        if (normalizedScope != null) {
+            parameters.addValue("scope", normalizedScope);
+        }
+        if (normalizedProjectKey != null) {
+            parameters.addValue("projectKey", normalizedProjectKey);
+        }
+        appendTagFilters(sql, parameters, tagFilters);
+
+        sql.append("""
+                ORDER BY score ASC, o.created_at DESC
+                LIMIT :limit
+                """);
+
+        return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put(ResponseKeys.ID, rs.getObject("id", UUID.class));
+            row.put(ResponseKeys.ID, rs.getString("id"));
             row.put(ResponseKeys.TYPE, rs.getString("type"));
             row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
             row.put(ResponseKeys.TITLE, rs.getString("title"));
             row.put(ResponseKeys.CONTENT, rs.getString("content"));
             row.put(ResponseKeys.HIGHLIGHTED_CONTENT, rs.getString("highlighted_content"));
             row.put(ResponseKeys.TAGS, rs.getString("tags_text"));
-            row.put("importanceLevel", rs.getString("importance_level"));
+            row.put(ResponseKeys.IMPORTANCE_LEVEL, rs.getString("importance_level"));
             row.put(ResponseKeys.SCORE, rs.getDouble("score"));
             row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
             row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
             return row;
-        }, ftsQuery, limit);
+        });
     }
 
     /**
@@ -523,9 +599,9 @@ public class MemoryService {
                 merged,
                 "session,summary",
                 sessionId.toString(),
-                "project",
+                AppConstants.SCOPE_PROJECT,
                 "mem_session_summary",
-                "default",
+                AppConstants.DEFAULT_PROJECT_NAME,
                 AppConstants.DEFAULT_IMPORTANCE_LEVEL);
     }
 
@@ -540,9 +616,28 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public Map<String, Object> getContext(String topicKey, int limit, boolean includePrompts) {
+        return getContextScoped(topicKey, limit, includePrompts, null, null);
+    }
+
+    /**
+     * Retrieves context with optional scope/project filtering.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getContextScoped(
+            String topicKey,
+            int limit,
+            boolean includePrompts,
+            String scope,
+            String projectKey) {
         int cappedLimit = Math.max(1, Math.min(limit, 100));
-        List<ObservationEntity> observations = observationRepository.findRecentByTopicKey(
-                TextProcessingUtils.normalize(topicKey) == null ? null : topicKey,
+        String normalizedScope = normalizeScopeOrNull(scope);
+        String normalizedProjectKey = normalizeProjectKeyOrNull(projectKey);
+        String normalizedTopicKey = TextProcessingUtils.normalize(topicKey) == null ? null : TextProcessingUtils.slugify(topicKey);
+
+        List<ObservationEntity> observations = observationRepository.findRecent(
+                normalizedScope,
+                normalizedProjectKey,
+                normalizedTopicKey,
                 PageRequest.of(0, cappedLimit));
 
         List<Map<String, Object>> observationRows = observations.stream()
@@ -563,10 +658,12 @@ public class MemoryService {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("observations", observationRows);
         response.put("recentSessions", sessions);
+        response.put(ResponseKeys.SCOPE, normalizedScope);
+        response.put(ResponseKeys.PROJECT_KEY, normalizedProjectKey);
 
         if (includePrompts) {
             List<Map<String, Object>> prompts = promptRepository.findRecentByTopicKey(
-                    TextProcessingUtils.normalize(topicKey) == null ? null : topicKey,
+                    normalizedTopicKey,
                     PageRequest.of(0, cappedLimit)).stream()
                     .map(prompt -> Map.<String, Object>of(
                             ResponseKeys.ID, prompt.getId(),
@@ -600,7 +697,11 @@ public class MemoryService {
         Instant from = center.getCreatedAt().minus(effectiveWindowMinutes, ChronoUnit.MINUTES);
         Instant to = center.getCreatedAt().plus(effectiveWindowMinutes, ChronoUnit.MINUTES);
 
-        List<ObservationEntity> around = observationRepository.findTimeline(from, to,
+        List<ObservationEntity> around = observationRepository.findTimeline(
+                center.getScope(),
+                center.getProjectKey(),
+                from,
+                to,
                 PageRequest.of(0, Math.max(1, limit)));
 
         return Map.of(
@@ -618,7 +719,7 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public Map<String, Object> getObservation(UUID observationId) {
-        ObservationEntity observation = observationRepository.findById(observationId)
+        ObservationEntity observation = observationRepository.findByIdAndDeletedFalse(observationId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
         return EntityMapperUtils.toObservationRow(observation);
     }
@@ -721,19 +822,18 @@ public class MemoryService {
      * Fallback search implementation when FTS5 is unavailable or fails.
      * Uses standard SQL LIKE operator for basic substring matching.
      */
-    private List<Map<String, Object>> fallbackSearch(String query, String tags, int limit, boolean includeDeleted) {
-        StringBuilder tagFilter = new StringBuilder();
-        if (TextProcessingUtils.normalize(tags) != null) {
-            String[] tagArray = tags.split(",");
-            for (String t : tagArray) {
-                if (!t.isBlank()) {
-                    tagFilter.append(" AND o.tags_text LIKE '%").append(t.trim()).append("%'");
-                }
-            }
-        }
-
+    private List<Map<String, Object>> fallbackSearch(
+            String query,
+            String tags,
+            int limit,
+            boolean includeDeleted,
+            String scope,
+            String projectKey) {
+        String normalizedScope = normalizeScopeOrNull(scope);
+        String normalizedProjectKey = normalizeProjectKeyOrNull(projectKey);
+        List<String> tagFilters = normalizeTagFilters(tags);
         String likeQuery = "%" + query.toLowerCase(Locale.ROOT) + "%";
-        String sql = """
+        StringBuilder sql = new StringBuilder("""
                 SELECT o.id,
                        o.type,
                        o.topic_key,
@@ -743,25 +843,136 @@ public class MemoryService {
                        o.created_at,
                        o.deleted
                 FROM observations o
-                WHERE (%s) %s
-                  AND (LOWER(o.title) LIKE ? OR LOWER(o.content) LIKE ?)
-                ORDER BY o.created_at DESC
-                LIMIT ?
-                """.formatted(includeDeleted ? "1=1" : "o.deleted = false", tagFilter.toString());
+                WHERE (LOWER(o.title) LIKE :likeQuery OR LOWER(o.content) LIKE :likeQuery)
+                """);
 
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+        if (!includeDeleted) {
+            sql.append(" AND o.deleted = false");
+        }
+        if (normalizedScope != null) {
+            sql.append(" AND o.scope = :scope");
+        }
+        if (normalizedProjectKey != null) {
+            sql.append(" AND o.project_key = :projectKey");
+        }
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+        parameters.addValue("likeQuery", likeQuery);
+        parameters.addValue("limit", limit);
+        if (normalizedScope != null) {
+            parameters.addValue("scope", normalizedScope);
+        }
+        if (normalizedProjectKey != null) {
+            parameters.addValue("projectKey", normalizedProjectKey);
+        }
+        appendTagFilters(sql, parameters, tagFilters);
+
+        sql.append("""
+                ORDER BY o.created_at DESC
+                LIMIT :limit
+                """);
+
+        return namedParameterJdbcTemplate.query(sql.toString(), parameters, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put(ResponseKeys.ID, rs.getString("id"));
             row.put(ResponseKeys.TYPE, rs.getString("type"));
             row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
             row.put(ResponseKeys.TITLE, rs.getString("title"));
             row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
-            row.put("importanceLevel", rs.getString("importance_level"));
+            row.put(ResponseKeys.IMPORTANCE_LEVEL, rs.getString("importance_level"));
             row.put(ResponseKeys.SCORE, 0.0); // No semantic scoring available
             row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
             row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
             return row;
-        }, likeQuery, likeQuery, limit);
+        });
+    }
+
+    private String resolveSessionStatus(String status) {
+        if (TextProcessingUtils.normalize(status) == null) {
+            return SessionStatus.COMPLETED.name();
+        }
+
+        try {
+            return SessionStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(ErrorMessages.INVALID_STATUS);
+        }
+    }
+
+    private String normalizeScope(String scope) {
+        if (TextProcessingUtils.normalize(scope) == null) {
+            return AppConstants.DEFAULT_SCOPE;
+        }
+
+        String normalized = scope.trim().toLowerCase(Locale.ROOT);
+        if (!AppConstants.SCOPE_PROJECT.equals(normalized) && !AppConstants.SCOPE_PERSONAL.equals(normalized)) {
+            throw new IllegalArgumentException(ErrorMessages.INVALID_SCOPE);
+        }
+        return normalized;
+    }
+
+    private String normalizeScopeOrNull(String scope) {
+        if (TextProcessingUtils.normalize(scope) == null) {
+            return null;
+        }
+        return normalizeScope(scope);
+    }
+
+    private String resolveProjectKey(String projectName) {
+        if (TextProcessingUtils.normalize(projectName) == null) {
+            return AppConstants.DEFAULT_PROJECT_KEY;
+        }
+
+        String key = TextProcessingUtils.slugify(projectName);
+        return key.isBlank() ? AppConstants.DEFAULT_PROJECT_KEY : key;
+    }
+
+    private String normalizeProjectKeyOrNull(String projectKey) {
+        if (TextProcessingUtils.normalize(projectKey) == null) {
+            return null;
+        }
+
+        String normalized = TextProcessingUtils.slugify(projectKey);
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String normalizeImportanceLevel(String importanceLevel) {
+        if (TextProcessingUtils.normalize(importanceLevel) == null) {
+            return AppConstants.DEFAULT_IMPORTANCE_LEVEL;
+        }
+
+        String normalized = importanceLevel.trim().toUpperCase(Locale.ROOT);
+        if (!AppConstants.IMPORTANCE_HIGH.equals(normalized)
+                && !AppConstants.DEFAULT_IMPORTANCE_LEVEL.equals(normalized)
+                && !AppConstants.IMPORTANCE_LOW.equals(normalized)) {
+            throw new IllegalArgumentException(ErrorMessages.INVALID_IMPORTANCE_LEVEL);
+        }
+        return normalized;
+    }
+
+    private String redactPrivateContent(String rawContent) {
+        return PRIVATE_BLOCK_PATTERN.matcher(rawContent).replaceAll("[REDACTED]");
+    }
+
+    private List<String> normalizeTagFilters(String tags) {
+        if (TextProcessingUtils.normalize(tags) == null) {
+            return List.of();
+        }
+
+        return Arrays.stream(tags.split(","))
+                .map(TextProcessingUtils::normalize)
+                .filter(Objects::nonNull)
+                .map(tag -> tag.toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
+    }
+
+    private void appendTagFilters(StringBuilder sql, MapSqlParameterSource parameters, List<String> tags) {
+        for (int i = 0; i < tags.size(); i++) {
+            String key = "tag" + i;
+            sql.append(" AND LOWER(COALESCE(o.tags_text, '')) LIKE :").append(key);
+            parameters.addValue(key, "%" + tags.get(i) + "%");
+        }
     }
 
 }

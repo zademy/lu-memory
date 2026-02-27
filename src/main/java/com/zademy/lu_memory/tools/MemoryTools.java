@@ -1,6 +1,7 @@
 package com.zademy.lu_memory.tools;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -144,7 +145,8 @@ public class MemoryTools {
                                 importanceLevel);
 
                 return Map.of("id", observation.id(), "topicKey", observation.topicKey(), "type",
-                                observation.type(), "createdAt", observation.createdAt());
+                                observation.type(), "scope", observation.scope(), "projectKey",
+                                observation.projectKey(), "createdAt", observation.createdAt());
         }
 
         /**
@@ -244,8 +246,43 @@ public class MemoryTools {
                 // Validate and normalize limit parameter
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
                 boolean includeDeletedRows = includeDeleted != null && includeDeleted;
-                return Map.of("query", query, "limit", maxRows, "results", memoryService
-                                .searchMemories(query, tags, maxRows, includeDeletedRows));
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("query", query);
+                response.put("limit", maxRows);
+                response.put("results", memoryService.searchMemories(query, tags, maxRows, includeDeletedRows));
+                return response;
+        }
+
+        /**
+         * Performs full-text search with explicit scope/project filters.
+         *
+         * @param query The search query string
+         * @param tags Optional comma-separated tags
+         * @param scope Optional scope filter ("project" or "personal")
+         * @param projectKey Optional project key filter
+         * @param limit Maximum number of results to return (default: 20, max: 200)
+         * @param includeDeleted If true, include soft-deleted observations in results
+         * @return Map containing query metadata and scoped results
+         */
+        @Tool(name = "mem_search_scoped", description = "Full-text search with scope and project filters")
+        public Map<String, Object> memSearchScoped(
+                        @ToolParam(description = "Search query") String query,
+                        @ToolParam(description = "Comma separated tags to filter by") String tags,
+                        @ToolParam(description = "Scope filter: project or personal") String scope,
+                        @ToolParam(description = "Project key filter") String projectKey,
+                        @ToolParam(description = "Max rows to return") Integer limit,
+                        @ToolParam(description = "Include deleted observations") Boolean includeDeleted) {
+                int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
+                boolean includeDeletedRows = includeDeleted != null && includeDeleted;
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("query", query);
+                response.put("scope", scope);
+                response.put("projectKey", projectKey);
+                response.put("limit", maxRows);
+                response.put("results",
+                                memoryService.searchMemoriesScoped(query, tags, maxRows,
+                                                includeDeletedRows, scope, projectKey));
+                return response;
         }
 
         /**
@@ -273,8 +310,37 @@ public class MemoryTools {
                 // Validate and normalize limit parameter
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
                 boolean includeDeletedRows = includeDeleted != null && includeDeleted;
-                return Map.of("query", query, "limit", maxRows, "results", memoryService
-                                .searchMemoriesAdvanced(query, tags, maxRows, includeDeletedRows));
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("query", query);
+                response.put("limit", maxRows);
+                response.put("results",
+                                memoryService.searchMemoriesAdvanced(query, tags, maxRows, includeDeletedRows));
+                return response;
+        }
+
+        /**
+         * Performs advanced full-text search with explicit scope/project filters.
+         */
+        @Tool(name = "mem_search_advanced_scoped",
+                        description = "Advanced full-text search with scope/project filters")
+        public Map<String, Object> memSearchAdvancedScoped(@ToolParam(
+                        description = "Search query (supports AND, OR, NOT, \"exact phrases\")") String query,
+                        @ToolParam(description = "Comma separated tags to filter by") String tags,
+                        @ToolParam(description = "Scope filter: project or personal") String scope,
+                        @ToolParam(description = "Project key filter") String projectKey,
+                        @ToolParam(description = "Max rows to return") Integer limit,
+                        @ToolParam(description = "Include deleted observations") Boolean includeDeleted) {
+                int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 200));
+                boolean includeDeletedRows = includeDeleted != null && includeDeleted;
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("query", query);
+                response.put("scope", scope);
+                response.put("projectKey", projectKey);
+                response.put("limit", maxRows);
+                response.put("results",
+                                memoryService.searchMemoriesAdvancedScoped(query, tags, maxRows,
+                                                includeDeletedRows, scope, projectKey));
+                return response;
         }
 
         /**
@@ -322,6 +388,29 @@ public class MemoryTools {
                 int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 100));
                 boolean includePromptRows = includePrompts == null || includePrompts;
                 return memoryService.getContext(topicKey, maxRows, includePromptRows);
+        }
+
+        /**
+         * Retrieves recent context with explicit scope/project filters.
+         *
+         * @param topicKey Topic key to filter by (optional)
+         * @param scope Optional scope filter ("project" or "personal")
+         * @param projectKey Optional project key filter
+         * @param limit Maximum number of observations to return (default: 20, max: 100)
+         * @param includePrompts If true, include saved prompts
+         * @return Map containing scoped context data
+         */
+        @Tool(name = "mem_context_scoped", description = "Get recent context with scope/project filters")
+        public Map<String, Object> memContextScoped(
+                        @ToolParam(description = "Topic key") String topicKey,
+                        @ToolParam(description = "Scope filter: project or personal") String scope,
+                        @ToolParam(description = "Project key filter") String projectKey,
+                        @ToolParam(description = "Maximum rows") Integer limit,
+                        @ToolParam(description = "Include saved prompts") Boolean includePrompts) {
+                int maxRows = limit == null ? 20 : Math.max(1, Math.min(limit, 100));
+                boolean includePromptRows = includePrompts == null || includePrompts;
+                return memoryService.getContextScoped(topicKey, maxRows, includePromptRows, scope,
+                                projectKey);
         }
 
         /**

@@ -8,11 +8,15 @@ public final class AppConstants {
         // Prevent instantiation
     }
 
-    public static final String DEFAULT_SCOPE = "project";
+    public static final String SCOPE_PROJECT = "project";
+    public static final String SCOPE_PERSONAL = "personal";
+    public static final String DEFAULT_SCOPE = SCOPE_PROJECT;
     public static final String DEFAULT_PROJECT_KEY = "default";
     public static final String DEFAULT_PROJECT_NAME = "default";
     public static final String DEFAULT_TOPIC_KEY = "general-memory";
+    public static final String IMPORTANCE_HIGH = "HIGH";
     public static final String DEFAULT_IMPORTANCE_LEVEL = "MEDIUM";
+    public static final String IMPORTANCE_LOW = "LOW";
 
     // Status keys for operations
     public static final String STATUS_HARD_DELETED = "HARD_DELETED";

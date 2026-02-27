@@ -44,7 +44,7 @@ public class LuMemoryApplication {
 	 * @return ToolCallbackProvider configured with memory tools for AI agent integration
 	 */
 	@Bean
-	public ToolCallbackProvider weatherTools(MemoryTools memoryTools) {
+	public ToolCallbackProvider memoryToolsProvider(MemoryTools memoryTools) {
 		return MethodToolCallbackProvider.builder().toolObjects(memoryTools).build();
 	}
 }

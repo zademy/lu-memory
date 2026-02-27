@@ -140,12 +140,14 @@ public final class EntityMapperUtils {
         row.put(ResponseKeys.TAGS, observation.getTagsText());
         row.put(ResponseKeys.SOURCE, observation.getSource());
         row.put(ResponseKeys.SESSION_ID, observation.getSessionId());
+        row.put(ResponseKeys.SCOPE, observation.getScope());
+        row.put(ResponseKeys.PROJECT_KEY, observation.getProjectKey());
         row.put(ResponseKeys.PROJECT_NAME, observation.getProjectName());
         row.put(ResponseKeys.CREATED_AT, observation.getCreatedAt());
         row.put(ResponseKeys.UPDATED_AT, observation.getUpdatedAt());
         row.put(ResponseKeys.DELETED, observation.isDeleted());
         row.put(ResponseKeys.DELETED_AT, observation.getDeletedAt());
-        row.put("importanceLevel", observation.getImportanceLevel());
+        row.put(ResponseKeys.IMPORTANCE_LEVEL, observation.getImportanceLevel());
         return row;
     }
 

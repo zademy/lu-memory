@@ -14,6 +14,9 @@ import com.zademy.lu_memory.models.ObservationType;
 import com.zademy.lu_memory.repositorys.ObservationRepository;
 import com.zademy.lu_memory.repositorys.PromptRepository;
 import com.zademy.lu_memory.repositorys.SessionRepository;
+import com.zademy.lu_memory.utils.EntityMapperUtils;
+import com.zademy.lu_memory.utils.SearchQueryUtils;
+import com.zademy.lu_memory.utils.TextProcessingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -23,9 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -91,10 +91,10 @@ public class MemoryService {
     @Transactional
     public SessionRecord startSession(String agentName, String branchName) {
         SessionEntity session = new SessionEntity();
-        session.setAgentName(normalize(agentName));
-        session.setBranchName(normalize(branchName));
+        session.setAgentName(TextProcessingUtils.normalize(agentName));
+        session.setBranchName(TextProcessingUtils.normalize(branchName));
         session.setStatus(SessionStatus.STARTED.name());
-        return toSessionRecord(sessionRepository.save(session));
+        return EntityMapperUtils.toSessionRecord(sessionRepository.save(session));
     }
 
     /**
@@ -112,9 +112,10 @@ public class MemoryService {
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.SESSION_NOT_FOUND + sessionId));
 
         session.setStatus(
-                normalize(status) == null ? SessionStatus.COMPLETED.name() : status.trim().toUpperCase(Locale.ROOT));
+                TextProcessingUtils.normalize(status) == null ? SessionStatus.COMPLETED.name()
+                        : status.trim().toUpperCase(Locale.ROOT));
 
-        String normSummary = normalize(summary);
+        String normSummary = TextProcessingUtils.normalize(summary);
         if (normSummary != null) {
             if (session.getSummary() == null || session.getSummary().isBlank()) {
                 session.setSummary(normSummary);
@@ -125,7 +126,7 @@ public class MemoryService {
         }
 
         session.setEndedAt(Instant.now());
-        return toSessionRecord(sessionRepository.save(session));
+        return EntityMapperUtils.toSessionRecord(sessionRepository.save(session));
     }
 
     /**
@@ -163,11 +164,11 @@ public class MemoryService {
 
         // Sanitize content (redact <private>...</private>)
         String sanitizedContent = content.replaceAll("(?s)<private>.*?</private>", "[REDACTED]");
-        String actualScope = normalize(scope) == null ? AppConstants.DEFAULT_SCOPE
+        String actualScope = TextProcessingUtils.normalize(scope) == null ? AppConstants.DEFAULT_SCOPE
                 : scope.trim().toLowerCase(Locale.ROOT);
         String actualTopicKey = resolveTopicKey(topicKey, title, sanitizedContent);
         String projectKey = AppConstants.DEFAULT_PROJECT_KEY;
-        String contentHash = computeHash(sanitizedContent);
+        String contentHash = TextProcessingUtils.computeHash(sanitizedContent);
 
         // Check for existing observations to handle de-duplication or revisions
         Optional<ObservationEntity> existingOpt = observationRepository
@@ -184,62 +185,38 @@ public class MemoryService {
             } else {
                 // If content changed, update it and increment revision count (Version tracking)
                 existing.setContent(sanitizedContent.trim());
-                if (normalize(title) != null) {
-                    existing.setTitle(normalize(title));
+                if (TextProcessingUtils.normalize(title) != null) {
+                    existing.setTitle(TextProcessingUtils.normalize(title));
                 }
-                if (normalize(tags) != null) {
-                    existing.setTagsText(normalize(tags));
+                if (TextProcessingUtils.normalize(tags) != null) {
+                    existing.setTagsText(TextProcessingUtils.normalize(tags));
                 }
                 existing.setRevisionCount(existing.getRevisionCount() + 1);
                 existing.setContentHash(contentHash);
             }
-            return toObservationRecord(observationRepository.save(existing));
+            return EntityMapperUtils.toObservationRecord(observationRepository.save(existing));
         }
 
         // New observation creation
         ObservationEntity observation = new ObservationEntity();
         observation.setType(ObservationType.fromString(type).name());
         observation.setTopicKey(actualTopicKey);
-        observation.setTitle(normalize(title));
+        observation.setTitle(TextProcessingUtils.normalize(title));
         observation.setContent(sanitizedContent.trim());
-        observation.setTagsText(normalize(tags));
+        observation.setTagsText(TextProcessingUtils.normalize(tags));
         observation.setSessionId(sessionId);
-        observation.setSource(normalize(source));
+        observation.setSource(TextProcessingUtils.normalize(source));
         observation.setDeleted(false);
         observation.setScope(actualScope);
         observation.setProjectKey(projectKey);
         observation.setProjectName(
-                normalize(projectName) != null ? normalize(projectName) : AppConstants.DEFAULT_PROJECT_NAME);
+                TextProcessingUtils.normalize(projectName) != null ? TextProcessingUtils.normalize(projectName)
+                        : AppConstants.DEFAULT_PROJECT_NAME);
         observation.setContentHash(contentHash);
         observation.setDuplicateCount(0);
         observation.setRevisionCount(1);
         observation.setLastSeenAt(Instant.now());
-        return toObservationRecord(observationRepository.save(observation));
-    }
-
-    /**
-     * Computes a SHA-256 hash of the given input string.
-     * Used for content de-duplication and version tracking.
-     *
-     * @param input The raw string content.
-     * @return A hexadecimal representation of the SHA-256 hash.
-     */
-    private String computeHash(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder(2 * hash.length);
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-            return hexString.toString();
-        } catch (NoSuchAlgorithmException e) {
-            return String.valueOf(input.hashCode());
-        }
+        return EntityMapperUtils.toObservationRecord(observationRepository.save(observation));
     }
 
     /**
@@ -268,26 +245,26 @@ public class MemoryService {
         ObservationEntity observation = observationRepository.findById(observationId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
 
-        if (normalize(type) != null) {
+        if (TextProcessingUtils.normalize(type) != null) {
             observation.setType(ObservationType.fromString(type).name());
         }
-        if (normalize(topicKey) != null) {
-            observation.setTopicKey(slugify(topicKey));
+        if (TextProcessingUtils.normalize(topicKey) != null) {
+            observation.setTopicKey(TextProcessingUtils.slugify(topicKey));
         }
-        if (normalize(title) != null) {
+        if (TextProcessingUtils.normalize(title) != null) {
             observation.setTitle(title.trim());
         }
-        if (normalize(content) != null) {
+        if (TextProcessingUtils.normalize(content) != null) {
             observation.setContent(content.trim());
         }
         if (tags != null) {
-            observation.setTagsText(normalize(tags));
+            observation.setTagsText(TextProcessingUtils.normalize(tags));
         }
-        if (normalize(projectName) != null) {
+        if (TextProcessingUtils.normalize(projectName) != null) {
             observation.setProjectName(projectName.trim());
         }
 
-        return toObservationRecord(observationRepository.save(observation));
+        return EntityMapperUtils.toObservationRecord(observationRepository.save(observation));
     }
 
     /**
@@ -330,7 +307,8 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public String suggestTopicKey(String topicHint, String contentHint) {
-        String base = slugify(normalize(topicHint) != null ? topicHint : contentHint);
+        String base = TextProcessingUtils
+                .slugify(TextProcessingUtils.normalize(topicHint) != null ? topicHint : contentHint);
         if (base.isBlank()) {
             base = AppConstants.DEFAULT_TOPIC_KEY;
         }
@@ -404,7 +382,7 @@ public class MemoryService {
                 row.put(ResponseKeys.TYPE, rs.getString("type"));
                 row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
                 row.put(ResponseKeys.TITLE, rs.getString("title"));
-                row.put(ResponseKeys.SNIPPET, toSnippet(rs.getString("content")));
+                row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
                 row.put(ResponseKeys.SCORE, rs.getDouble("score"));
                 row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
                 row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
@@ -415,40 +393,6 @@ public class MemoryService {
             // Fallback to simple search without FTS
             return fallbackSearch(query, limit, includeDeleted);
         }
-    }
-
-    /**
-     * Fallback search mechanism using SQL LIKE operators when FTS5 is unavailable
-     * or fails.
-     *
-     * @param query          The search term.
-     * @param limit          Maximum results to return.
-     * @param includeDeleted Whether to include soft-deleted records.
-     * @return A list of matching memory records.
-     */
-    private List<Map<String, Object>> fallbackSearch(String query, int limit, boolean includeDeleted) {
-        String sql = """
-                SELECT id, type, topic_key, title, content, created_at, deleted
-                FROM observations
-                WHERE (%s)
-                  AND (type LIKE ? OR topic_key LIKE ? OR title LIKE ? OR content LIKE ?)
-                ORDER BY created_at DESC
-                LIMIT ?
-                """.formatted(includeDeleted ? "1=1" : "deleted = false");
-
-        String searchTerm = "%" + query + "%";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put(ResponseKeys.ID, rs.getString("id"));
-            row.put(ResponseKeys.TYPE, rs.getString("type"));
-            row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
-            row.put(ResponseKeys.TITLE, rs.getString("title"));
-            row.put(ResponseKeys.SNIPPET, toSnippet(rs.getString("content")));
-            row.put(ResponseKeys.SCORE, 0.0);
-            row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
-            row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
-            return row;
-        }, searchTerm, searchTerm, searchTerm, searchTerm, limit);
     }
 
     /**
@@ -468,7 +412,7 @@ public class MemoryService {
         }
 
         // Advanced search with FTS5 using different operators
-        String ftsQuery = enhanceFtsQuery(query);
+        String ftsQuery = SearchQueryUtils.enhanceFtsQuery(query);
 
         String sql = """
                 SELECT o.id,
@@ -506,27 +450,6 @@ public class MemoryService {
     }
 
     /**
-     * Enhances a plain query with FTS5 boolean operators for better search
-     * performance.
-     *
-     * @param query The raw query string.
-     * @return An optimized FTS5 query.
-     */
-    private String enhanceFtsQuery(String query) {
-        // Enhance FTS query with advanced operators
-        String enhanced = query.trim();
-
-        // If it does not contain FTS operators, add prefix search
-        if (!enhanced.contains("AND") && !enhanced.contains("OR") && !enhanced.contains("NOT")
-                && !enhanced.contains("\"")) {
-            String[] words = enhanced.split("\\s+");
-            enhanced = String.join(" OR ", words);
-        }
-
-        return enhanced;
-    }
-
-    /**
      * Saves a high-level summary of the current session as a permanent observation.
      * Integrates lessons learned for future architectural reference.
      *
@@ -541,8 +464,8 @@ public class MemoryService {
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.SESSION_NOT_FOUND + sessionId));
 
         String merged = summary;
-        if (normalize(lessonsLearned) != null) {
-            merged = (normalize(summary) == null ? "" : summary.trim() + "\n\n")
+        if (TextProcessingUtils.normalize(lessonsLearned) != null) {
+            merged = (TextProcessingUtils.normalize(summary) == null ? "" : summary.trim() + "\n\n")
                     + "Lessons learned:\n"
                     + lessonsLearned.trim();
         }
@@ -575,11 +498,11 @@ public class MemoryService {
     public Map<String, Object> getContext(String topicKey, int limit, boolean includePrompts) {
         int cappedLimit = Math.max(1, Math.min(limit, 100));
         List<ObservationEntity> observations = observationRepository.findRecentByTopicKey(
-                normalize(topicKey) == null ? null : topicKey,
+                TextProcessingUtils.normalize(topicKey) == null ? null : topicKey,
                 PageRequest.of(0, cappedLimit));
 
         List<Map<String, Object>> observationRows = observations.stream()
-                .map(this::toObservationRow)
+                .map(EntityMapperUtils::toObservationRow)
                 .toList();
 
         List<Map<String, Object>> sessions = sessionRepository
@@ -599,7 +522,7 @@ public class MemoryService {
 
         if (includePrompts) {
             List<Map<String, Object>> prompts = promptRepository.findRecentByTopicKey(
-                    normalize(topicKey) == null ? null : topicKey,
+                    TextProcessingUtils.normalize(topicKey) == null ? null : topicKey,
                     PageRequest.of(0, cappedLimit)).stream()
                     .map(prompt -> Map.<String, Object>of(
                             ResponseKeys.ID, prompt.getId(),
@@ -637,8 +560,8 @@ public class MemoryService {
                 PageRequest.of(0, Math.max(1, limit)));
 
         return Map.of(
-                ResponseKeys.CENTER, toObservationRow(center),
-                ResponseKeys.TIMELINE, around.stream().map(this::toObservationRow).toList(),
+                ResponseKeys.CENTER, EntityMapperUtils.toObservationRow(center),
+                ResponseKeys.TIMELINE, around.stream().map(EntityMapperUtils::toObservationRow).toList(),
                 ResponseKeys.FROM, from,
                 ResponseKeys.TO, to);
     }
@@ -653,7 +576,7 @@ public class MemoryService {
     public Map<String, Object> getObservation(UUID observationId) {
         ObservationEntity observation = observationRepository.findById(observationId)
                 .orElseThrow(() -> new IllegalArgumentException(ErrorMessages.OBSERVATION_NOT_FOUND + observationId));
-        return toObservationRow(observation);
+        return EntityMapperUtils.toObservationRow(observation);
     }
 
     /**
@@ -676,11 +599,12 @@ public class MemoryService {
 
         PromptEntity promptEntity = new PromptEntity();
         promptEntity.setSessionId(sessionId);
-        promptEntity.setTopicKey(normalize(topicKey) == null ? suggestTopicKey(topicKey, prompt) : slugify(topicKey));
-        promptEntity.setIntent(normalize(intent));
-        promptEntity.setSource(normalize(source));
+        promptEntity.setTopicKey(TextProcessingUtils.normalize(topicKey) == null ? suggestTopicKey(topicKey, prompt)
+                : TextProcessingUtils.slugify(topicKey));
+        promptEntity.setIntent(TextProcessingUtils.normalize(intent));
+        promptEntity.setSource(TextProcessingUtils.normalize(source));
         promptEntity.setPrompt(prompt.trim());
-        return toPromptRecord(promptRepository.save(promptEntity));
+        return EntityMapperUtils.toPromptRecord(promptRepository.save(promptEntity));
     }
 
     /**
@@ -733,7 +657,7 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public Optional<SessionRecord> getSession(UUID sessionId) {
-        return sessionRepository.findById(sessionId).map(this::toSessionRecord);
+        return sessionRepository.findById(sessionId).map(EntityMapperUtils::toSessionRecord);
     }
 
     /**
@@ -741,109 +665,47 @@ public class MemoryService {
      * content.
      */
     private String resolveTopicKey(String provided, String title, String content) {
-        if (normalize(provided) != null) {
-            return slugify(provided);
+        if (TextProcessingUtils.normalize(provided) != null) {
+            return TextProcessingUtils.slugify(provided);
         }
 
-        String source = normalize(title) != null ? title : content;
+        String source = TextProcessingUtils.normalize(title) != null ? title : content;
         return suggestTopicKey(source, source);
     }
 
     /**
-     * Transforms raw strings into URL-safe, lowercase slugs for consistent topic
-     * tracking.
+     * Fallback search implementation when FTS5 is unavailable or fails.
+     * Uses standard SQL LIKE operator for basic substring matching.
      */
-    private String slugify(String raw) {
-        if (raw == null) {
-            return "";
-        }
+    private List<Map<String, Object>> fallbackSearch(String query, int limit, boolean includeDeleted) {
+        String likeQuery = "%" + query.toLowerCase(Locale.ROOT) + "%";
+        String sql = """
+                SELECT o.id,
+                       o.type,
+                       o.topic_key,
+                       o.title,
+                       o.content,
+                       o.created_at,
+                       o.deleted
+                FROM observations o
+                WHERE (%s)
+                  AND (LOWER(o.title) LIKE ? OR LOWER(o.content) LIKE ?)
+                ORDER BY o.created_at DESC
+                LIMIT ?
+                """.formatted(includeDeleted ? "1=1" : "o.deleted = false");
 
-        String slug = raw.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "")
-                .trim();
-
-        if (slug.length() > 120) {
-            slug = slug.substring(0, 120).replaceAll("-$", "");
-        }
-
-        return slug;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put(ResponseKeys.ID, rs.getString("id"));
+            row.put(ResponseKeys.TYPE, rs.getString("type"));
+            row.put(ResponseKeys.TOPIC_KEY, rs.getString("topic_key"));
+            row.put(ResponseKeys.TITLE, rs.getString("title"));
+            row.put(ResponseKeys.SNIPPET, TextProcessingUtils.toSnippet(rs.getString("content")));
+            row.put(ResponseKeys.SCORE, 0.0); // No semantic scoring available
+            row.put(ResponseKeys.CREATED_AT, rs.getTimestamp("created_at").toInstant());
+            row.put(ResponseKeys.DELETED, rs.getBoolean("deleted"));
+            return row;
+        }, likeQuery, likeQuery, limit);
     }
 
-    /**
-     * Trims strings and returns null if empty, ensuring clean data persistence.
-     */
-    private String normalize(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    /**
-     * Creates a short preview of the content for list views.
-     */
-    private String toSnippet(String content) {
-        if (content == null) {
-            return "";
-        }
-
-        if (content.length() <= 220) {
-            return content;
-        }
-
-        return content.substring(0, 220) + "...";
-    }
-
-    /**
-     * Mapping helper to convert JPA Entity to an API-friendly Map representation.
-     */
-    private Map<String, Object> toObservationRow(ObservationEntity observation) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put(ResponseKeys.ID, observation.getId());
-        row.put(ResponseKeys.TYPE, observation.getType());
-        row.put(ResponseKeys.TOPIC_KEY, observation.getTopicKey());
-        row.put(ResponseKeys.TITLE, observation.getTitle());
-        row.put(ResponseKeys.CONTENT, observation.getContent());
-        row.put(ResponseKeys.TAGS, observation.getTagsText());
-        row.put(ResponseKeys.SOURCE, observation.getSource());
-        row.put(ResponseKeys.SESSION_ID, observation.getSessionId());
-        row.put(ResponseKeys.PROJECT_NAME, observation.getProjectName());
-        row.put(ResponseKeys.CREATED_AT, observation.getCreatedAt());
-        row.put(ResponseKeys.UPDATED_AT, observation.getUpdatedAt());
-        row.put(ResponseKeys.DELETED, observation.isDeleted());
-        row.put(ResponseKeys.DELETED_AT, observation.getDeletedAt());
-        return row;
-    }
-
-    private SessionRecord toSessionRecord(com.zademy.lu_memory.entitys.SessionEntity entity) {
-        if (entity == null)
-            return null;
-        return new SessionRecord(
-                entity.getId(), entity.getAgentName(), entity.getBranchName(),
-                entity.getSummary(), entity.getStatus(), entity.getStartedAt(),
-                entity.getEndedAt());
-    }
-
-    private ObservationRecord toObservationRecord(com.zademy.lu_memory.entitys.ObservationEntity entity) {
-        if (entity == null)
-            return null;
-        return new ObservationRecord(
-                entity.getId(), entity.getType(), entity.getTopicKey(),
-                entity.getTitle(), entity.getContent(), entity.getTagsText(),
-                entity.getSource(), entity.getSessionId(), entity.getScope(),
-                entity.getProjectKey(), entity.getProjectName(), entity.getContentHash(),
-                entity.getDuplicateCount(), entity.getRevisionCount(), entity.getLastSeenAt(),
-                entity.isDeleted(), entity.getDeletedAt(), entity.getCreatedAt(),
-                entity.getUpdatedAt());
-    }
-
-    private PromptRecord toPromptRecord(com.zademy.lu_memory.entitys.PromptEntity entity) {
-        if (entity == null)
-            return null;
-        return new PromptRecord(
-                entity.getId(), entity.getSessionId(), entity.getTopicKey(),
-                entity.getIntent(), entity.getSource(), entity.getPrompt(),
-                entity.getCreatedAt());
-    }
 }

@@ -1,19 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  lu-memory - MCP Memory Server
+
+  A robust, lightweight Model Context Protocol (MCP) server built with Java 25 and Spring Boot.
+  Provides external persistent memory service for AI assistants to maintain long-term context
+  across multiple sessions, document architectural decisions, log bugs, and store structured observations.
+
+  Author: lu-memory team
+  Version: 0.0.1-SNAPSHOT
+  License: MIT
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
+
+	<!-- Spring Boot Parent Configuration -->
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>4.0.3</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
+
+	<!-- Project Identification -->
 	<groupId>com.zademy</groupId>
 	<artifactId>lu-memory</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>lu-memory</name>
-	<description>Spring Boot</description>
-	<url/>
+	<description>MCP Memory Server for AI Agents - Long-term context management with SQLite FTS5</description>
+	<url>https://github.com/zademy/lu-memory</url>
+
+	<!-- License Information -->
 	<licenses>
 		<license>
 			<name>MIT License</name>
@@ -21,55 +38,79 @@
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
+
+	<!-- Development Team -->
 	<developers>
-		<developer/>
+		<developer>
+			<name>lu-memory Team</name>
+			<email>team@zademy.com</email>
+			<organization>Zademy</organization>
+			<organizationUrl>https://zademy.com</organizationUrl>
+		</developer>
 	</developers>
+
+	<!-- Source Control Management -->
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:git://github.com/zademy/lu-memory.git</connection>
+		<developerConnection>scm:git:ssh://github.com:zademy/lu-memory.git</developerConnection>
+		<tag>main</tag>
+		<url>https://github.com/zademy/lu-memory/tree/main</url>
 	</scm>
+
+	<!-- Project Properties -->
 	<properties>
+		<!-- Java 25 for latest language features and performance improvements -->
 		<java.version>25</java.version>
+		<!-- Spring AI version for MCP server integration -->
 		<spring-ai.version>2.0.0-M2</spring-ai.version>
 	</properties>
+
+	<!-- Core Dependencies -->
 	<dependencies>
+		<!-- Spring AI MCP Server Starter - Provides Model Context Protocol server capabilities -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-mcp-server</artifactId>
 		</dependency>
-		
+
+		<!-- Spring Web - Required for MCP HTTP transport and web infrastructure -->
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-web</artifactId>
 		</dependency>
 
+		<!-- Spring Data JPA - For database operations and entity management -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
 
+		<!-- SQLite JDBC Driver - Embedded database for lightweight deployment -->
 		<dependency>
 			<groupId>org.xerial</groupId>
 			<artifactId>sqlite-jdbc</artifactId>
 			<version>3.45.1.0</version>
 		</dependency>
 
+		<!-- Hibernate Community Dialects - SQLite dialect for JPA/Hibernate support -->
 		<dependency>
 			<groupId>org.hibernate.orm</groupId>
 			<artifactId>hibernate-community-dialects</artifactId>
 			<version>6.4.4.Final</version>
 		</dependency>
 
+		<!-- Spring Boot Test Starter - Testing framework with JUnit 5, Mockito, etc. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+
+	<!-- Dependency Management -->
 	<dependencyManagement>
 		<dependencies>
+			<!-- Spring AI Bill of Materials - Manages Spring AI dependency versions -->
 			<dependency>
 				<groupId>org.springframework.ai</groupId>
 				<artifactId>spring-ai-bom</artifactId>
@@ -80,12 +121,15 @@
 		</dependencies>
 	</dependencyManagement>
 
+	<!-- Build Configuration -->
 	<build>
 		<plugins>
+			<!-- Spring Boot Maven Plugin - Creates executable JAR and provides development tools -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
+					<!-- Enable native access for Java 21+ foreign function interface improvements -->
 					<jvmArguments>
 						--enable-native-access=ALL-UNNAMED
 					</jvmArguments>
